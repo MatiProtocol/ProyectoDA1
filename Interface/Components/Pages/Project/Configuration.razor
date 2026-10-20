@@ -1,0 +1,85 @@
+﻿@page "/proyecto/{projectName}/configurar"
+@using System.ComponentModel.DataAnnotations
+@using Auxiliaries
+@using Services
+@using Services.DTOs
+@inject NavigationManager NavigationManager
+@implements IDisposable
+
+@if (_sessionService.GetCurrent() == null || project == null || !_projectService.IsManagerOrLeader(_sessionService.GetCurrent(), project))
+
+{
+    NavigationManager.NavigateTo("/proyectos");
+}
+
+<button class="btn btn-outline-warning mb-2" @onclick=ReturnToProject>
+    <i class="bi bi-arrow-bar-left text-white"></i>
+</button>
+
+<h3>Configuracion del proyecto</h3>
+
+<div>
+    <div class="mb-3">
+        <EditForm Model="_nameModel" 
+                  OnValidSubmit="@(() => _projectService.ChangeNameProject(_sessionService.GetCurrent(), projectName, _nameModel.Name))"
+        >
+            <label for="ProjectName" class="form-label">Nombre</label>
+            <input class="form-control" list="datalistUserDTOMail" id="ProjectName" placeholder="@_nameModel.Name" @bind="_nameModel.Name">
+            <button type="submit" class="btn btn-primary">Guardar</button>
+        </EditForm>
+    </div>
+    <EditForm Model="_descriptionModel" 
+              OnValidSubmit="@(() => _projectService.ChangeDescProject(_sessionService.GetCurrent(), projectName, _descriptionModel.Desc))"
+    >
+        <div class="mb-3">
+            <label for="projectDescription" class="form-label">Descripcion</label>
+            <textarea class="form-control" id="projectDescription" rows="3" @bind="_descriptionModel.Desc">@project?.Description</textarea>
+            <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+    </EditForm>
+</div>
+
+@code {
+    [Parameter] public string projectName { get; set; }
+
+    private readonly ProjectService _projectService = ProjectService.GetInstance();
+    private readonly SessionService _sessionService = SessionService.GetInstance();
+    
+    private RequiredName? _nameModel = new RequiredName();
+    private RequiredDescription _descriptionModel = new RequiredDescription();
+    private ProjectDTO? project;
+    private Reactivity? _reactivity = Reactivity.GetInstance();
+
+    protected override void OnInitialized()
+    {
+        project = _projectService.GetProjectDto(projectName).Item1;
+        _reactivity.OnChange += Change;
+    }
+
+    public class RequiredName
+    {
+        [Required] public string? Name { get; set; }
+    }
+
+    public class RequiredDescription
+    {
+        [Required] [MaxLength(400)] public string? Desc { get; set; }
+    }
+
+    public void Dispose()
+    {
+        _reactivity.OnChange -= Change;
+    }
+
+    private void Change()
+    {
+        project = project = _projectService.GetProjectDto(projectName).Item1;
+        InvokeAsync(StateHasChanged);
+    }
+    
+    private void ReturnToProject()
+    {
+        NavigationManager.NavigateTo("/proyecto/" + project.Name);
+    }
+
+}

@@ -1,0 +1,52 @@
+@page "/cuenta"
+@using Services 
+@inject NavigationManager NavigationManager
+
+<PageTitle>Cuenta</PageTitle>
+
+@if(_sessionService.GetCurrent() == null) NavigationManager.NavigateTo("/");
+
+
+<h1 class="pb-5">Cuenta personal</h1>
+@if (_sessionService.GetCurrent() != null)
+{
+    <div class="container-fluid mt-5">
+        <div class="m-3 ">
+            Nombre: <b id="NameUser" class="text-decoration-underline "> @_sessionService.GetCurrent().Name </b><br>
+        </div>
+        <div class="m-3">
+            Apellido: <b id="LastNameUser" class="text-decoration-underline"> @_sessionService.GetCurrent().LastName</b><br>
+        </div>
+        <div class="m-3">
+            Email: <b id="EmailUser" class="text-decoration-underline"> @_sessionService.GetCurrent().Email</b><br>
+        </div>
+        <div class="m-3">
+            Fecha de nacimiento: <b id="BirthdateUser" class="text-decoration-underline"> @_sessionService.GetCurrent().BirthDate</b><br>
+        </div>
+        <div class="m-3" >
+            Rol: <b id="RolUser" class="text-decoration-underline"> @_sessionService.GetCurrent().Role</b><br>
+        </div>
+    </div>
+}
+<div class="mt-1 d-flex p-3">
+    <NavLink href="/cuenta/editar" class="px-md-4">
+        <button class="btn btn-primary p-2 px-md-4"> Editar</button>
+    </NavLink>
+    
+    <button class="btn btn-danger px-md-4" @onclick="logOut"> Cerrar sesión </button>
+</div>
+
+@code {
+    private readonly SessionService _sessionService = SessionService.GetInstance();
+
+    public void logOut()
+    {
+        _sessionService.Logout();
+        NavigationManager.NavigateTo("/");
+    }
+
+    public void editionPage()
+    {
+        NavigationManager.NavigateTo("/cuenta/editar");
+    }
+}

@@ -1,0 +1,157 @@
+@page "/recurso-lista/registrar"
+
+@using System.ComponentModel.DataAnnotations;
+@using Auxiliaries
+@using Services
+@using Services.DTOs
+@inject NavigationManager NavManager
+@implements IDisposable
+
+@if(_sessionService.GetCurrent() == null) NavManager.NavigateTo("/");
+
+
+@if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <div class="alert alert-danger mt-3 text-center">
+        @_errorMessage
+    </div>
+}
+
+<div class="container mt-5">
+    <div>
+        <button class="btn btn-outline-warning" @onclick=ReturnToList>
+        <i class="bi bi-arrow-bar-left text-white"></i>
+        </button>
+    </div>
+    <EditForm model="_resourceModel" OnValidSubmit="RegisterResource">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card bg-dark-subtle text-dark-emphasis">
+                    <div class="card-body">
+                        <h3 class="card-title text-center">Registrar Recurso</h3>
+                        <div class="mb-3">
+                            <label for="resourceTitle" class="form-label">Título</label>
+                            <input type="text" class="form-control" id="resourceTitle" @bind="_newResourceDto.Name" required/>
+                        </div>
+                        <div class="mb-3">
+                            <label for="resourceType" class="form-label">Tipo</label>
+                            <input type="text" class="form-control" id="resourceType" @bind="_newResourceDto.Type" required/>
+                        </div>
+                        <div class="mb-3">
+                            <label for="resourceDescription" class="form-label">Descripción</label>
+                            <input type="text" class="form-control" id="resourceDescription" @bind="_newResourceDto.Description" required/>
+                        </div>
+                        <div class="mb-3">
+                            <label for="projectSelect" class="form-label">Exclusivo al proyecto (opcional):</label>
+
+                            <div class="form-floating">
+                                <select class="form-select" id="projectSelect" @bind="_selectedProjectDtoName">
+                                    <option selected value="0">Elegir proyecto</option>
+                                    @foreach (var project in _projectService.GetAllProjectsDto())
+                                    {
+                                        <option value="@project.Name">@project.Name</option>
+
+                                    }
+                                </select>
+
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="quantityRes" class="form-label">Cantidad </label>
+                            <input min="1" type="number" id="quantityRes" class="form-control" @bind="_newResourceDto.Quantity">
+                        </div>
+                        <div>
+                            <button type="submit" class="btn btn-primary">
+                                Registrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </EditForm>
+</div>
+
+@code {
+    private readonly SessionService _sessionService = SessionService.GetInstance();
+    private readonly ResourceService _resourceService = ResourceService.GetInstance();
+    private readonly ProjectService _projectService = ProjectService.GetInstance();
+        
+    private RequiredResource? _resourceModel;
+    private ResourceDTO _newResourceDto = new ResourceDTO();
+    private int _quantity = 1;
+    private string? _errorMessage;
+    private Reactivity _reactivity = Reactivity.GetInstance();
+    private string? _selectedProjectDtoName="0";
+    private ProjectDTO? projectExclusive = null;
+
+    protected override void OnInitialized()
+    {
+        _reactivity.OnChange += Change;
+        Reset();
+    }
+
+    private void Reset()
+    {
+        _resourceModel = new RequiredResource();
+        _newResourceDto = new ResourceDTO();
+        
+        _errorMessage = "";
+    }
+
+    private void ReturnToList()
+    {
+        NavManager.NavigateTo("/recurso-lista");
+    }
+    private void RegisterResource()
+    {
+         
+        UserDTO? userLogged = _sessionService.GetCurrent();
+        if (userLogged == null) _errorMessage = "No hay nadie logueado";
+        else
+        {
+            if (_selectedProjectDtoName != "0")
+            {
+                var projectTuple = _projectService.GetProjectDto(_selectedProjectDtoName);
+                if (projectTuple.Item2 == null) projectExclusive = projectTuple.Item1;
+                else
+                {
+                    _errorMessage = projectTuple.Item2.GetMessage();
+                    return;
+                }
+            }
+            Error? error = _resourceService.CreateResource(userLogged, _newResourceDto, projectExclusive, _newResourceDto.Quantity);
+            if (error != null) _errorMessage = error.GetMessage();
+            else
+            {
+                Reset();
+            }
+        }
+    }
+
+    public class RequiredResource
+    {
+        [Required] public string? Name { get; set; }
+
+        [Required] public string? Type { get; set; }
+
+        [Required] public string? Description { get; set; }
+
+        [Required] public bool? IsExclusive { get; set; }
+
+        [Required] public int? Quantity { get; set; }
+
+        public ProjectDTO? ProjectDto { get; set; }
+    }
+
+    public void Dispose()
+    {
+        _reactivity.OnChange -= Change;
+    }
+
+    private void Change()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+}

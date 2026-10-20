@@ -1,0 +1,119 @@
+@page "/proyecto/{projectName}/tareas/crear"
+
+@using System.ComponentModel.DataAnnotations
+@using Auxiliaries
+@using Services
+@using Services.DTOs
+
+@inject NavigationManager NavigationManager
+
+
+@if (_sessionService.GetCurrent() == null || project == null || !_projectService.IsPartOfTheProject(_sessionService.GetCurrent(), project))
+{
+    NavigationManager.NavigateTo("/proyectos");
+}
+
+@if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <div class="alert alert-danger mt-3 text-center">
+        @_errorMessage
+    </div>
+}
+<div>
+    <div class="row justify-content-center">
+        <div>
+            <button class="btn btn-outline-warning" @onclick=ReturnToTaskList>
+                <i class="bi bi-arrow-bar-left text-white"></i>
+            </button>
+        </div>
+        <div class="col-md-6">
+            <EditForm Model="_taskModel" OnValidSubmit="CreateProjectTask">
+                <div class="card bg-dark-subtle text-dark-emphasis">
+                    <div class="card-body">
+                        <h3 class="card-title text-center">Crear Tarea</h3>
+                        <div class="mb-3">
+                            <label for="taskTitle" class="form-label">Titulo</label>
+                            <InputText id="taskTitle" class="form-control" @bind-Value="_taskModel.Titulo" required/>
+                        </div>
+                        <div class="mb-3">
+                            <label for="taskDescription" class="form-label">Descripción</label>
+                            <InputText id="taskDescription" class="form-control" @bind-Value="_taskModel.Descripcion" required/>
+                        </div>
+                        <div class="mb-3">
+                            <label for="duration" class="form-label">Duración (en horas)</label>
+                            <InputText id="duration" class="form-control" @bind-Value="_taskModel.Duracion" placeholder="HH"  required pattern="\d+" title="Formato: HH"/>
+                        </div>
+                        <div>
+                            <button type="submit" class="btn btn-primary">
+                                Crear
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly ProjectService _projectService = ProjectService.GetInstance();
+    private readonly SessionService _sessionService = SessionService.GetInstance();
+
+    [Parameter]
+    public string projectName { get; set; }
+
+    private TaskModel _taskModel = new TaskModel();
+    private ProjectDTO? project;
+    private string _errorMessage = "";
+
+    protected override void OnInitialized()
+    {
+        var resultado = _projectService.GetProjectDto(projectName);
+        project = resultado.Item1;
+        
+        Reset();
+    }
+
+    private void Reset()
+    {
+        _taskModel = new TaskModel();
+    }
+
+    public class TaskModel
+    {
+        [Required]
+        public string? Titulo { get; set; }
+
+        [Required]
+        [MaxLength(400)]
+        public string? Descripcion { get; set; }
+
+        [Required]
+        public string? Duracion { get; set; }
+    }
+
+    private void CreateProjectTask()
+    {
+        _errorMessage = "";
+        TaskDTO taskDto = new TaskDTO
+        {
+            Title = _taskModel.Titulo,
+            Description = _taskModel.Descripcion,
+            DurationHour = int.Parse(_taskModel.Duracion.Split(":")[0]),
+            State = TaskState.Pending
+        };
+        if (taskDto.DurationHour > 200)
+        {
+            _errorMessage = "La duracion no puede ser mayor de 200 horas";
+            return;
+        }
+        var error = _projectService.AddTask(_sessionService.GetCurrent(), project, taskDto);
+        if (error != null) _errorMessage = error.GetMessage();
+        else Reset();
+    }
+    
+    private void ReturnToTaskList()
+    {
+        NavigationManager.NavigateTo("/proyecto/" + project.Name + "/tareas");
+    }
+}

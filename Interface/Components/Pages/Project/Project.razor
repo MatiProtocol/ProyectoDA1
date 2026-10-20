@@ -1,0 +1,256 @@
+﻿@page "/proyecto/{projectName}"
+@using Auxiliaries
+@using Services
+@using Services.DTOs
+@inject NavigationManager NavigationManager
+@implements IDisposable
+@inject IJSRuntime JS
+
+@if (_sessionService.GetCurrent() == null || project == null || !_projectService.IsPartOfTheProject(_sessionService.GetCurrent(), project))
+{
+    NavigationManager.NavigateTo("/proyectos");
+}
+
+
+<PageTitle>@projectName</PageTitle>
+
+<div class="d-flex flex-column h-100">
+    <div>
+        <div class="d-flex justify-content-between">
+            <div>
+                <button class="btn btn-outline-warning" @onclick=ReturnToProjects>
+                    <i class="bi bi-arrow-bar-left text-white"></i>
+                </button>
+            </div>
+            <NavLink href=@($"/proyecto/{projectName}/UsoRecursos") class="btn btn-primary">
+                Uso de Recursos
+            </NavLink>
+            <NavLink href=@($"/proyecto/{projectName}/configurar") class="btn btn-primary">
+                Configurar
+            </NavLink>
+        </div>
+        <div>
+            <div class="d-flex align-items-center pt-3 pb-2 mb-3 border-bottom justify-content-around">
+                <div class="card bg-transparent border-primary-subtle" style="width: 22rem;">
+                    <div class="card-header border-primary-subtle">
+                        Miembros del equipo
+                    </div>
+                    @if (project is { Team.Item1: not null })
+                    {
+                        var projectManager = project.Team.Item1;
+                        <div class="ms-3">
+                            @($"{projectManager.Name} | {projectManager.LastName} | {projectManager.Email}")
+                        </div>
+                    }
+                    @for (int i = 0; i < cantMembers && i < 2; i++)
+                    {
+                        var projectMember = project.Team.Item2.ElementAt(i).Value;
+                        <div class="ms-3">
+                            @($"{projectMember.Name} | {projectMember.LastName} | {projectMember.Email}")
+                        </div>
+                    }
+                    <div class="ms-3">
+                        ...
+                    </div>
+                    <div class="d-flex justify-content-start m-1">
+                        <NavLink class="btn btn-primary d-flex justify-content-end" href=@($"/proyecto/{projectName}/miembros")>
+                            Ver más
+                        </NavLink>
+                    </div>
+                </div>
+                <div class="card bg-transparent border-primary-subtle" style="width: 22rem;">
+                    @if (_projectService.IsManagerOfThisProject(_sessionService.GetCurrent(), project))
+                    {
+                        <div class="card-header border-primary-subtle">
+                            Tareas
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="card-header border-primary-subtle">
+                            Mis Tareas
+                        </div>
+                    }
+                    <div class="ms-3">
+                        @if (_projectService.IsManagerOfThisProject(_sessionService.GetCurrent(), project))
+                        {
+                            int i = 0;
+                            foreach (var task in _projectService.GetTaskCanStart(project).Item1.Take(4))
+                            {
+                                <div class="">@task.Title </div>
+                            }
+                        }
+                        ...
+                    </div>
+                    <div class="d-flex justify-content-start m-1">
+                        <NavLink class="btn btn-primary d-flex" href="@($"/proyecto/{projectName}/tareas")">
+                            Ver más
+                        </NavLink>
+                    </div>
+                </div>
+                
+                <div class="card bg-transparent border-primary-subtle" style="width: 22rem;">
+                        <div class="card-header border-primary-subtle">
+                            Estado del Proyecto
+                        </div>
+                        <div class="ms-3">
+                            @{
+                                var state = _projectService.GetUpdateProjectState(project);
+                                var critPath = _projectService.GetCriticalPath(project);
+                                var days = critPath.duration / 24;
+                                var hours = critPath.duration % 24;
+                            }
+                            Estado: @StateToSpanish(state) <br/>
+                            Fecha de Inicio: @project.StartDate.ToString("MM/dd/yyyy hh:mm") <br/>
+                            @if (state == TaskState.Finished)
+                            {
+                                <span>Fecha de Finalizacion:</span> @project.EndDate.ToString("MM/dd/yyyy hh:mm"); <br/>
+                            }
+                            else
+                            {
+                                <span>Fecha de Finalizacion Est: </span> @project.Delay.ToString("MM/dd/yyyy hh:mm"); <br/>
+                            }
+                            Duracion: @days (Dias) @hours (Horas)
+                        </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="Graph" class="flex-fill"></div>
+</div>
+
+@code {
+    private readonly SessionService _sessionService  = SessionService.GetInstance();
+    private readonly ProjectService _projectService = ProjectService.GetInstance();
+    
+    struct Wrapper<T>(T t)
+    {
+        public T data { get; set; }= t;
+
+    }
+    
+    struct Vertex
+    {
+        public string Id { get; set; }= "";
+        public string Name { get; set; }= "";
+        public string State { get; set; }= "";
+        public string Slack {get; set;} = "";
+
+        public Vertex(string name, TaskState state, int slack)
+        {
+            Id = "Vertex" + name;
+            Name = name;
+            State = state.ToString();
+            Slack = slack.ToString();
+        }
+    }
+    
+    struct Edge
+    {
+        private static int NextId = 0;
+        public string Id { get; set; }= "";
+        public string Source { get; set; }= "";
+        public string   Target { get; set; }= "";
+        public string Type {get; set;} = "";
+        public string CriticalPath {get; set;} = "False";
+
+        public Edge(string target, string dep, TypeDependency type, bool critical) 
+        {
+            Id = "Edge" + NextId.ToString();
+            NextId += 1;
+            
+            Source ="Vertex" + target;
+            Target = "Vertex" + dep;
+
+            Type = type.ToString();
+
+            if (critical)
+                CriticalPath = "True";
+        }
+    }
+    
+
+    private Wrapper<Vertex>[] GetVertex()
+    {
+        var vertexList = new List<Wrapper<Vertex>>();
+        
+        foreach (var t in project.Tasks)
+        {
+            vertexList.Add(new Wrapper<Vertex>(new Vertex(t.Title, t.State, t.Slack)));
+        }
+
+        return vertexList.ToArray();
+    }
+    
+    private Wrapper<Edge>[] GetEdge()
+    {
+        var edgeList = new List<Wrapper<Edge>>();
+        var criticalPath = _projectService.GetCriticalPath(project).path.ToList();
+        
+        foreach (var t in project.Tasks)
+        {
+            var tIndex = criticalPath.FindIndex(tempTask => tempTask.Title == t.Title);
+            foreach (var dep in _projectService.GetTaskDependencies(project, t))
+            {
+                var belongCritical = tIndex != -1  ? criticalPath[tIndex - 1].Title == dep.task.Title : false;
+                edgeList.Add(new Wrapper<Edge>(
+                    new Edge( dep.task.Title, t.Title, dep.type, belongCritical)
+                    )
+                );
+            }
+        }
+
+        return edgeList.ToArray();
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var vertex = GetVertex();
+        var edge = GetEdge();
+        await JS.InvokeVoidAsync("initCytoscape", vertex, edge);
+    }
+
+   [Parameter]
+   public string projectName { get; set; }
+   private Reactivity _reactivity = Reactivity.GetInstance();
+
+   private ProjectDTO? project;
+   private int cantMembers = 0;
+
+   protected override void OnInitialized()
+   {
+       project = _projectService.GetProjectDto(projectName).Item1;
+       if (_sessionService.GetCurrent() == null || project == null)
+       {
+           NavigationManager.NavigateTo("/");
+       }
+       cantMembers = project.Team.Item2.Keys.Count;
+       _reactivity.OnChange += Change;
+   }
+   
+   public void Dispose()
+   {
+       _reactivity.OnChange -= Change;
+   }
+
+   private void Change()
+   {
+       project = _projectService.GetProjectDto(project.Name).Item1;
+       InvokeAsync(StateHasChanged);
+   }
+   
+    private string StateToSpanish(TaskState state)
+    {
+        return state switch
+        {
+            TaskState.Finished => "Terminada",
+            TaskState.Started => "Ejecutandose",
+            TaskState.Pending => "Espera",
+        };
+    }
+    
+    private void ReturnToProjects()
+    {
+        NavigationManager.NavigateTo("/proyectos");
+    }
+}

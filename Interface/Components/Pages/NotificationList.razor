@@ -1,0 +1,63 @@
+@page "/notificacion-lista"
+
+@using Auxiliaries
+@using Services
+@using Services.DTOs
+@implements IDisposable
+
+@inject NavigationManager NavManager
+
+<h3>Lista de Notificaciones</h3>
+
+@foreach (var not in GetPendingNotification())
+{
+    <div class="border border-primary p-2 m-1 border-2">
+        <div class="d-flex justify-content-between ">
+            <p>@not.Message</p>
+            <button class="btn btn-outline-primary" @onclick="() => MarkAsRead(not)">Marcar como Leido</button>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly SessionService _sessionService = SessionService.GetInstance();
+    private readonly NotificationService _notificationService = NotificationService.GetInstance();
+    
+    private readonly Reactivity _reactivity = Reactivity.GetInstance();
+    
+    protected override void OnInitialized()
+    {
+        if(_sessionService.GetCurrent() == null)
+        {
+            NavManager.NavigateTo("/");
+        }
+        _reactivity.OnChange += Change;
+    }
+    
+    public void Dispose()
+    {
+        _reactivity.OnChange -= Change;
+    }
+
+    private void Change()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private NotificationDTO[] GetPendingNotification()
+    {
+        var currentDto = _sessionService.GetCurrent();
+        if(currentDto == null) return [];
+        var (nots, _)  = _notificationService.GetUserPendingNotifications(currentDto);
+
+        return nots == null ? [] : nots!;
+    }
+    
+    private void MarkAsRead(NotificationDTO not)
+    {
+        var currentDto = _sessionService.GetCurrent();
+        if(currentDto == null) return ;
+        
+        _notificationService.MarkAsRead(currentDto, not);
+    }
+}

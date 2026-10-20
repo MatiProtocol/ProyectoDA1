@@ -1,0 +1,14 @@
+﻿@page "/"
+@using Services
+
+@inject NavigationManager NavigationManager
+
+<PageTitle>Bienvenido</PageTitle>
+@code {
+    protected override async System.Threading.Tasks.Task OnAfterRenderAsync(bool firstRender)
+    {
+        NavigationManager.NavigateTo(SessionService.GetInstance().GetCurrent() == null ? "/login" : "/home");
+        await  System.Threading.Tasks.Task.CompletedTask;
+    }
+
+}

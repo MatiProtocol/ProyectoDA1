@@ -1,0 +1,136 @@
+@page "/usuario-lista/registrar" 
+@using System.ComponentModel.DataAnnotations;
+@using Auxiliaries
+@using Services
+@using Services.DTOs
+@inject NavigationManager NavManager
+@implements IDisposable
+
+
+
+@if(_sessionService.GetCurrent() == null) NavManager.NavigateTo("/");
+
+
+@if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <div class="alert alert-danger mt-3 text-center">
+        @_errorMessage
+    </div>
+}
+
+<div class="container mt-5">
+    <div>
+        <button class="btn btn-outline-warning" @onclick=ReturnToList>
+            <i class="bi bi-arrow-bar-left text-white"></i>
+        </button>
+    </div>
+    <EditForm model="_userModel" OnValidSubmit="RegisterUser">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card bg-dark-subtle text-dark-emphasis">
+                    <div class="card-body">
+                        <h3 class="card-title text-center">Registrar Usuario</h3>
+                        <div class="mb-3">
+                            <label for="userName" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="userName" @bind="_newUser.Name" required/> <!-- @bind="mail">-->
+                        </div>
+                        <div class="mb-3">
+                            <label for="userLastName" class="form-label">LastName</label>
+                            <input type="text" class="form-control" id="userLastName" @bind="_newUser.LastName" required/>
+                        </div>
+                        <div class="mb-3">
+                            <label for="userEmail" class="form-label">Email</label>
+                            <input type="Email" class="form-control" id="userEmail" @bind="_newUser.Email" required/>
+                        </div>
+                        <div class="mb-3">
+                            <label for="userBirthDate" class="form-label">Birth Date</label>
+                            <input type="date" class="form-control" id="userBirthDate" @bind="_dateTime" required/>
+                        </div>
+                        <div class="mb-3">
+                            <label for="userPassword" class="form-label">Contraseña</label>
+                            <input type="password" class="form-control" id="password" @bind="_newUser.Password" required/>
+                        </div>
+                        <div>
+                            <button type="submit" class="btn btn-primary">
+                                Registrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </EditForm>
+</div>
+
+@code {
+    private readonly SessionService _sessionService = SessionService.GetInstance();
+    private readonly UserService _userService = UserService.GetInstance();
+    
+    private RequiredUser? _userModel;
+    private UserDTO _newUser = new UserDTO();
+    private DateTime _dateTime;
+    private string? _errorMessage;
+    private Reactivity _reactivity = Reactivity.GetInstance();
+
+    protected override void OnInitialized()
+    {
+        Reset();
+    }
+
+    private void ReturnToList()
+    {
+        NavManager.NavigateTo("/usuario-lista");
+    }
+    private void Reset()
+    {
+        _userModel = new RequiredUser();
+        _newUser = new UserDTO();
+        _dateTime = DateTime.Today;
+        _errorMessage = "";
+    }
+
+    private void RegisterUser()
+    {
+        _newUser.BirthDate = _dateTime.ToString("MM/dd/yyyy");
+        UserDTO? userLogged = _sessionService.GetCurrent();
+        if (userLogged == null) _errorMessage = "No hay nadie logueado";
+        else
+        {
+            Error? error = _userService.CreateUser(userLogged, _newUser);
+            if (error != null) _errorMessage = error.GetMessage();
+            else
+            {
+                Reset();
+            }
+        }
+    }
+
+    private class RequiredUser
+    {
+        [Required]
+        public string? Name { get; set; }
+
+        [Required]
+        public string? LastName { get; set; }
+
+        [Required]
+        [EmailAddress]
+        public string? Email { get; set; }
+
+        [Required]
+        public DateTime? BirthDate { get; set; }
+
+        [Required]
+        public string? Password { get; set; }
+    }
+    
+    public void Dispose()
+    {
+        _reactivity.OnChange -= Change;
+    }
+
+    private void Change()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+}

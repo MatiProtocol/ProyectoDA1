@@ -1,0 +1,252 @@
+@page "/cuenta/editar"
+@using System.ComponentModel.DataAnnotations
+@using System.Globalization
+@using System.Reflection.Metadata
+@using Services 
+@using Services.DTOs
+@using Auxiliaries
+@using Interface.Components.Pages.User
+@inject NavigationManager NavigationManager
+
+<PageTitle>Editar</PageTitle>
+
+@if (_sessionService.GetCurrent() == null)
+{
+    NavigationManager.NavigateTo("/");
+}
+
+
+<h1 class="pb-5">Editar datos personales</h1>
+
+<div class="container-fluid mt-5">
+    <EditForm model="_userModel" OnValidSubmit="EditUserData">
+        
+        
+        <div class="d-flex flex-column">
+            <div class="row justify-content-between mt-3" style="width:min(100%, 22rem);">
+                <label class="d-inline-block col my-auto" for="userName">Nombre:</label>
+                <input style="width: 30ch" type="text" class="form-control-sm col" id="userName" @bind="_userModel.Name" required/>
+            </div>
+            <div class="row justify-content-between mt-3" style="width:min(100%, 22rem)">
+                <label class="d-inline-block col my-auto" for="LastNameUser">Apellido:</label> 
+                <input style="width: 30ch" id="LastNameUser" class="form-control-sm col" @bind="_userModel.LastName"/>
+            </div>
+            <div class="row justify-content-between mt-3 position-relative" style="width:min(100%, 22rem)">
+                <label class="d-inline-block col my-auto" for="EmailUser">Email:</label>
+                <input style="width: 30ch" id="EmailUser" type="email" class="form-control-sm col" @bind="_userModel.Email" required
+                       @oninput="CheckEmailChange">
+                @if (changeEmail)
+                {
+                    <div class="position-absolute alert-info col my-auto text-black" style="top: 0; right: calc(83% * -1 - 20px); width: 33ch">
+                        Será necesario volver a iniciar sesión.
+                    </div>
+                }
+            </div>
+            <div class="row justify-content-between mt-3" style="width:min(100%, 22rem)">
+                <label class="d-inline-block col my-auto" for="BirthdateUser">Fecha de nacimiento:</label> 
+                <input id="BirthdateUser" type="date" class="form-control-sm col" @bind="_dateTime" required/>
+            </div>
+            <div class="row justify-content-between mt-3 mb-3" style="width:min(100%, 22rem)">
+                <label class="d-inline-block col my-auto" for="RolUser">Rol: </label>
+                <input style="width: 30ch" id="RolUser" disabled class="form-control-sm col invalid" @bind="_userModel.Role">
+            </div>
+            
+            <h3>Cambio de contraseña: </h3>
+            <div class="row justify-content-between mt-3 position-relative" style="width:min(100%, 22rem)">
+                <label class="d-inline-block col my-auto" for="PassUser">Contraseña actual: </label>
+                <input style="width: 30ch" id="PassUser" type="password" class="form-control-sm col" @bind="_userModel.Password" 
+                       @oninput="CheckPassword">
+                @if (changePass)
+                {
+                    <div class="position-absolute alert-info col my-auto text-black" style="top: 0; right: calc(83% * -1 - 20px); width: 33ch">
+                        Será necesario volver a iniciar sesión.
+                    </div>
+                }
+            </div>
+            <div class="row justify-content-between mt-3" style="width:min(100%, 22rem)">
+                <label class="d-inline-block col my-auto" for="NewPassUser">Nueva contraseña: </label>
+                <input style="width: 30ch" id="NewPassUser" type="password" class="form-control-sm col" @bind="newPass">
+            </div>
+            <div class="row justify-content-between mt-3" style="width:min(100%, 22rem)">
+                <label class="d-inline-block col my-auto" for="ValidNewPassUser">Repetir contraseña: </label>
+                <input style="width: 30ch" id="ValidNewPassUser" type="password" class="form-control-sm col" @bind="newPassValid">
+            </div>
+            <div class="mt-1 d-flex p-3">
+                <button class="btn btn-primary px-md-4" type="submit"> Guardar </button>
+                <NavLink href="/cuenta" class="px-md-4">
+                    <button class="btn btn-danger p-2 px-md-4"> Atrás</button>
+                </NavLink>
+            </div>
+        </div>
+    </EditForm>
+</div>
+
+@if (_errorMessage != null)
+{
+    <div class="alert alert-danger text-black text-center">@_errorMessage</div>
+}
+@if (_successMessage != null)
+{
+    <div class="alert alert-success text-black text-center">@_successMessage</div>
+}
+
+
+@code {
+    private readonly SessionService _sessionService = SessionService.GetInstance();
+    private readonly UserService _userService = UserService.GetInstance();
+    
+    private RequiredUser? _userModel = new();
+    private UserDTO? _currentUser = new();
+    private DateTime _dateTime;
+    private string? _errorMessage;
+    private string? _successMessage;
+    private string oldMail;
+    private bool changeEmail;
+    private bool changePass;
+    private string newPass;
+    private string newPassValid;
+
+    public class RequiredUser
+    {
+        [Required]
+        public string? Name { get; set; }
+
+        [Required]
+        public string? LastName { get; set; }
+
+        [Required]
+        [EmailAddress]
+        public string? Email { get; set; }
+
+        [Required]
+        public DateTime? BirthDate { get; set; }
+
+        [Required]
+        public string? Password { get; set; }
+        [Required]
+        public string? Role { get; set; }
+    }
+    
+    protected override void OnInitialized()
+    {
+        var birthDateStr = _sessionService.GetCurrent()?.BirthDate;
+        if (!string.IsNullOrEmpty(birthDateStr))
+        {
+            DateTime.TryParseExact(birthDateStr,"MM/dd/yyyy", CultureInfo.CreateSpecificCulture("en-US"),DateTimeStyles.None ,out _dateTime);
+        }
+        else
+        {
+            _dateTime = DateTime.Today;
+        }
+        var user = _sessionService.GetCurrent();
+        if (user != null)
+        {
+            oldMail = user.Email;
+            _userModel.Name = user.Name ?? "";
+            _userModel.LastName = user.LastName ?? "";
+            _userModel.Email = user.Email ?? "";
+            _dateTime = DateTime.TryParse(user.BirthDate, out var d) ? d : DateTime.Today;
+            _userModel.BirthDate = _dateTime;
+            _userModel.Role = user.Role.ToString() ?? "";
+            _userModel.Password = ""; 
+        }
+        else
+        {
+            _dateTime = DateTime.Today;
+        }
+        
+    }
+
+    private void CheckEmailChange(ChangeEventArgs e)
+    {
+        var newMail = e.Value.ToString();
+        changeEmail = !string.Equals(oldMail.ToLower(), newMail.ToLower());
+       
+    }
+    private void CheckPassword(ChangeEventArgs e)
+    {
+        var newPass = e.Value.ToString();
+        changePass = !string.Equals(newPass.ToLower(),"");
+    }
+    
+    private void EditUserData()
+    {
+        string formatBirthdate = _dateTime.ToString("MM/dd/yyyy", CultureInfo.CreateSpecificCulture("en-US"));
+        var userLogged = _sessionService.GetCurrent();
+        if (userLogged == null)
+        {
+            _errorMessage = "No hay nadie logueado";
+            return;
+        }
+        
+        if (_userModel.Email != userLogged.Email)
+        {
+            var error = _userService.ChangeEmail(userLogged.Email, _userModel.Email);
+            
+            if (error != null)
+            {
+                _errorMessage = error.GetMessage();
+                return;
+            }
+
+            changeEmail = true;
+        }
+        
+        var updatedUser = _userService.GetUserDto(_userModel.Email ?? userLogged.Email);
+        if (updatedUser == null)
+        {
+            _errorMessage = "Usuario no encontrado luego de actualizar email";
+            return;
+        }
+        
+        _userModel.BirthDate = DateTime.Parse(formatBirthdate, CultureInfo.CreateSpecificCulture("en-US"));
+        
+        updatedUser.BirthDate = _userModel.BirthDate?.ToString() ?? "";
+        
+        var nameErr = _userService.EditUserDtoName(userLogged, _userModel.Name);
+        var lastNameErr = _userService.EditUserDtoLastName(userLogged, _userModel.LastName);
+        var birthdateErr = _userService.EditUserDtoBirthdate(userLogged, _userModel.BirthDate?.ToString("MM/dd/yyyy"));
+
+        if (!string.IsNullOrEmpty(_userModel.Password))
+        {
+            if (string.IsNullOrEmpty(newPass) || string.IsNullOrEmpty(newPassValid))
+            {
+                _errorMessage = "Debe completar los campos de nueva contraseña";
+                return;
+            }
+
+            if (!newPass.Equals(newPassValid))
+            {
+                _errorMessage = "Las contraseñas no coinciden";
+                return;
+            }
+
+            var error = _userService.ChangePassword(userLogged,_userModel.Password, newPass);
+            if (!error)
+            {
+                _errorMessage = "No fue posible cambiar la contraseña.";
+                return;
+            }
+
+            changePass = true;
+        }
+
+        if (changeEmail || changePass)
+        {
+            _successMessage = "Datos actualizados correctamente. Por favor reinicie sesión";
+            _sessionService.Logout();
+        }
+
+        if (nameErr != null || lastNameErr != null || birthdateErr != null)
+        {
+            _errorMessage = "No se pudieron cambiar los datos";
+            return;
+        }
+        
+        _successMessage = "Datos actualizados correctamente";
+        
+        
+    }
+}
+
+

@@ -1,0 +1,80 @@
+﻿@using Auxiliaries
+@implements IDisposable
+@using Services
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="home">TaskTrackPro</a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler"/>
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="home" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+            </NavLink>
+        </div>
+        
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="proyectos">
+                <span class="bi bi-list-task d-flex btn-lg mb-3 px-lg-0" aria-hidden="true"></span> Proyectos 
+            </NavLink>
+        </div>
+        
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="notificacion-lista">
+                <span class="bi bi-bell d-flex btn-lg mb-3 px-lg-0" aria-hidden="true"></span> Notificaciones: @GetNumPending()
+            </NavLink>
+        </div>
+        
+        @if (_sessionService.GetCurrent() != null && _sessionService.GetCurrent()!.Role >= Roles.ProjectManager)
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="usuario-lista">
+                    <span  class="bi bi-person-lines-fill d-flex btn-lg mb-3 px-lg-0" aria-hidden="true"></span> Usuarios
+                </NavLink>
+            </div>
+            
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="recurso-lista">
+                    <span  class="bi bi-inboxes-fill d-flex btn-lg mb-3 px-lg-0" aria-hidden="true"></span> Recursos
+                </NavLink>
+            </div>
+            
+        }
+    </nav>
+</div>
+
+@code {
+    private readonly SessionService _sessionService = SessionService.GetInstance();
+    private readonly NotificationService _notificationService = NotificationService.GetInstance();
+    
+    private readonly Reactivity _reactivity = Reactivity.GetInstance();
+    
+    protected override void OnInitialized()
+    {
+        _reactivity.OnChange += Change;
+    }
+    
+    public void Dispose()
+    {
+        _reactivity.OnChange -= Change;
+    }
+
+    private void Change()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+    
+    private int GetNumPending()
+    {
+        var currentDto = _sessionService.GetCurrent();
+        if (currentDto == null) return 0;
+        var nots = _notificationService.GetUserPendingNotifications(currentDto).nots;
+        if (nots == null) return 0;
+        return nots.Length;
+    }
+}

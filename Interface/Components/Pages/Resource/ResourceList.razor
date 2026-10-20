@@ -1,0 +1,222 @@
+@page "/recurso-lista"
+
+@implements IDisposable
+
+@using System.ComponentModel.DataAnnotations
+@using Auxiliaries
+@using Services
+@using Services.DTOs
+@inject NavigationManager NavManager
+
+
+
+<h1>Lista de recursos</h1>
+
+@if (_sessionService.GetCurrent() == null)
+{
+    NavManager.NavigateTo("/");
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-end align-items-center mb-3">
+        <NavLink style="aspect-ratio: 1 / 1; width: 3rem;" class="nav-link p-0 justify-content-center btn btn-outline-primary border-primary" href="/recurso-lista/registrar">
+            <h1 class="lh-1 mt-1 text-primary">+</h1>
+        </NavLink>
+    </div>
+    @if (_errorMessage != null)
+    {
+        <div class="alert alert-danger text-black text-center">@_errorMessage</div>
+    }
+    @if (_successMessage != null)
+    {
+        <div class="alert alert-success text-black text-center">@_successMessage</div>
+    }
+    @{
+        var resourceDto = _resourceService.GetAllResourcesDto();
+    }
+    @if (resourceDto.Count == 0)
+    {
+        <h4> No hay recursos registrados aún </h4>
+    }
+    else
+    {
+
+        <div class="accordion" id="accordionResource">
+
+            @foreach (var resource in resourceDto)
+            {
+                <div class="accordion-item bg-dark border-primary-subtle text-white">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button bg-black link-primary" type="button" data-bs-toggle="collapse" data-bs-target="#@resource.Id" aria-expanded="true" aria-controls="collapseOne">
+                            Nombre: @resource.Name | Tipo: @resource.Type
+                        </button>
+                    </h2>
+                    <div id="@resource.Id" class="accordion-collapse collapse bg-transparent" data-bs-parent="#accordionResource">
+                        <div class="accordion-body">
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Descripción: </strong>@resource.Description</li>
+                                <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>
+                                    @if (@resource.IsExclusive)
+                                    {
+                                        <span>El recurso es exclusivo.</span>
+                                    }
+                                    else
+                                    {
+                                        <span>El recurso no es exclusivo.</span>   
+                                    }
+                                    </strong>
+                                </li>
+                                <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Cantidad: </strong>@resource.Quantity</li>
+                                <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Usos: </strong>@_resourceService.GetResourceTotalUses(resource)</li>
+                                <div class="d-flex justify-content-between mt-3">
+                                    <button type="button" class="btn btn-danger ms-3" @onclick="() => DeleteResource(resource.Type, resource.Id)" >Eliminar recurso</button>
+                                    @if (_sessionService.GetCurrent().Role == Roles.SystemManager && !resource.IsExclusive && _resourceService.GetResourceTotalUses(resource) == 0)
+                                    {
+                                        <button type="button" class="btn btn-warning" data-bs-toggle="modal" @onclick="() => GetTypeAndName(resource.Type, resource.Name)"
+                                                data-bs-target="#EditResourceDataModal">
+                                            Editar recurso
+                                        </button>
+                                    }
+                                </div>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+</div>
+
+
+<EditForm model="_resourceModelEdit" OnValidSubmit="EditResource">
+    <div class="modal fade" id="EditResourceDataModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="EditResourceDataModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark-subtle border-primary-subtle">
+                <div class="modal-header bg-dark-subtle border-primary-subtle">
+                    <h1 class="modal-title fs-5" id="EditResourceDataModalLabel">Editar datos</h1>
+                </div>
+                <div class="modal-body bg-dark-subtle border-primary-subtle">
+                
+                    @if (!string.IsNullOrEmpty( _errorMessage))
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            @_errorMessage
+                        </div>
+                    }
+                    
+                    <div class="mb-3">
+                        <label for="resourceTitle" class="form-label">Nuevo título</label>
+                        <input type="text" class="form-control" id="resourceTitle" @bind="_newTitle" required/> 
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="resourceTitle" class="form-label">Nueva descripción</label>
+                        <input type="text" class="form-control" id="resourceTitle" @bind="_newDesc" required/> 
+                    </div>
+                
+                    <div class="modal-footer bg-dark-subtle border-primary-subtle">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" @onclick="ClearInputs">Cerrar</button>
+                        <button class="btn btn-warning" type="submit">Cambiar datos</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</EditForm>
+
+
+
+@code {
+    private readonly SessionService _sessionService = SessionService.GetInstance();
+    private readonly ResourceService _resourceService = ResourceService.GetInstance();
+    
+    private readonly Reactivity _reactivity = Reactivity.GetInstance();
+    private UserDTO? loggedUserDto;
+    private string? _errorMessage;
+    private string? _successMessage;
+    private string? _newTitle;
+    private string? _newDesc;
+    private string? _clickedType;
+    private string? _clickedName;
+    
+    private RequiredResourceEdit? _resourceModelEdit;
+    
+    protected override void OnInitialized()
+    {
+        _reactivity.OnChange += Change;
+        loggedUserDto = _sessionService.GetCurrent();
+        _resourceModelEdit = new RequiredResourceEdit();
+    }
+    
+    public class RequiredResourceEdit
+    {
+        [Required] public string? Name { get; set; }
+
+        [Required] public string? Description { get; set; }
+
+    }
+    
+    public void Dispose()
+    {
+        _reactivity.OnChange -= Change;
+    }
+    
+    private void Change()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void DeleteResource(string resourceType, int id)
+    {
+        var errorDelete = _resourceService.DeleteResource(loggedUserDto!, id);
+        if (errorDelete != null)
+        {
+            _errorMessage = errorDelete.GetMessage();
+            _successMessage = null;
+            return;
+        }
+        _successMessage = "Se ha borrado una instancia del recurso";
+        _errorMessage = null;
+    }
+
+    private void EditResource()
+    {
+        var resourceDto = new ResourceDTO
+        {
+            Name = _clickedName,
+            Type = _clickedType
+        };
+
+
+        var changeDesc = _resourceService.ChangeDescriptionResource(loggedUserDto, new ProjectDTO(), resourceDto, _newDesc);
+        var changeName = _resourceService.ChangeNameResource(loggedUserDto, new ProjectDTO(), resourceDto, _newTitle);
+
+        if (changeDesc != null)
+        {
+            _errorMessage = "No fue posible cambiar la descripcion";
+        }
+
+        if (changeName != null)
+        {
+            _errorMessage = changeName.GetMessage();
+        }
+
+        _clickedName = _newTitle;
+    }
+
+    private void GetTypeAndName(string type, string name)
+    {
+        ClearInputs();
+
+        _clickedName = name;
+        _clickedType = type;
+    }
+
+    private void ClearInputs()
+    {
+        _newDesc = "";
+        _newTitle = "";
+    }
+    
+}

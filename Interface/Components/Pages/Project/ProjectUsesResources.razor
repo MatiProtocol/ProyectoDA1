@@ -1,0 +1,243 @@
+@page "/proyecto/{projectName}/UsoRecursos"
+@using Auxiliaries
+@using Services
+@using Services.DTOs
+
+@inject NavigationManager NavManager
+
+@implements IDisposable
+
+<PageTitle>@projectName Recursos</PageTitle>
+
+@if (SessionService.GetInstance().GetCurrent() == null)
+{
+    NavManager.NavigateTo("/");
+}
+
+<button class="btn btn-outline-warning" @onclick=ReturnToProject>
+    <i class="bi bi-arrow-bar-left text-white"></i>
+</button>
+
+<h3>Recursos usados por proyectos</h3>
+<h5>Recursos exclusivos</h5>
+
+@if (_errorMessage != null)
+{
+    <div class="alert alert-danger text-black text-center">@_errorMessage</div>
+}
+
+<div>
+    @foreach (var resEx in (_projectDto = ProjectService.GetInstance().GetProjectDto(projectName).Item1!).ResourceExclucive)
+    {
+        <div class="accordion-item bg-dark border-primary-subtle text-white">
+            @{ var (res, quant) = resEx;}
+            <h2 class="accordion-header">
+                <button class="accordion-button bg-black link-primary" type="button" data-bs-toggle="collapse" data-bs-target="#Ex+@res.Id" aria-expanded="true" aria-controls="collapseOne">
+                    Nombre: @res.Name | Tipo: @res.Type
+                </button>
+            </h2>
+            <div id="Ex+@res.Id" class="accordion-collapse collapse bg-transparent" data-bs-parent="#accordionResource">
+                <div class="accordion-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Descripción: </strong>@res.Description</li>
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Cantidad: </strong>@res.Quantity</li>
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Usos: </strong>@ResourceService.GetInstance().GetResourceTotalUses(res)</li>
+                        <div class="d-flex justify-content-between mt-3">
+                            <button type="button" class="btn btn-danger ms-3" @onclick="() => DeleteResource(res.Type, res.Id)">Eliminar recurso</button>
+                        </div>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<h5>Recursos en uso</h5>
+
+<div>
+    @foreach (var resEx in ResourceTaskWhoUseThem())
+    {
+        @if (resEx.Value.Item2.All(t => t.task.State != TaskState.Planed || t.task.State != TaskState.Started)) continue;
+        <div class="accordion-item bg-dark border-primary-subtle text-white">
+            @{
+                var (_, (res, l)) = resEx;
+            }
+            <h2 class="accordion-header">
+                <button class="accordion-button bg-black link-primary" type="button" data-bs-toggle="collapse" data-bs-target="#Use+@res.Id" aria-expanded="true" aria-controls="collapseOne">
+                    Nombre: @res.Name | Tipo: @res.Type
+                </button>
+            </h2>
+            <div id="Use+@res.Id" class="accordion-collapse collapse bg-transparent" data-bs-parent="#accordionResource">
+                <div class="accordion-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Descripción: </strong>@res.Description</li>
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Cantidad: </strong>@res.Quantity</li>
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Usos: </strong>@ResourceService.GetInstance().GetResourceTotalUses(res)</li>
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Tarea: </strong>
+                            <ul class="list-group list-group-flush">
+                                @foreach (var (task, quant) in l)
+                                {
+                                    @if (task.State != TaskState.Planed || task.State != TaskState.Started) continue;
+                                    <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Nombre: </strong>@task.Title</li>
+                                    <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Uso: </strong> @quant </li>
+                                }
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<h5>Recursos en seleccionados</h5>
+<div>
+    @foreach (var resEx in ResourceTaskWhoUseThem())
+    {
+        @if(resEx.Value.Item1.Queue.All(t => t.task.State != TaskState.Pending)) continue;
+        <div class="accordion-item bg-dark border-primary-subtle text-white">
+            @{
+                var (_, (res, l)) = resEx;
+            }
+            <h2 class="accordion-header">
+                <button class="accordion-button bg-black link-primary" type="button" data-bs-toggle="collapse" data-bs-target="#Con+@res.Id" aria-expanded="true" aria-controls="collapseOne">
+                    Nombre: @res.Name | Tipo: @res.Type
+                </button>
+            </h2>
+            <div id="Con+@res.Id" class="accordion-collapse collapse bg-transparent" data-bs-parent="#accordionResource">
+                <div class="accordion-body">
+                    <ul class="list-group list-groupde-flush">
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Descripción: </strong>@res.Description</li>
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Cantidad: </strong>@res.Quantity</li>
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Usos: </strong>@ResourceService.GetInstance().GetResourceTotalUses(res)</li>
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Proyectos requieren el mismo recurso: </strong>
+                            <ol class="list-group list-group-flush">
+                                @foreach (var (projName, list) in ResourceToProjectAndTask(res))
+                                {
+                                    <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Nombre: </strong>@projName</li>
+                                    <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Tareas: </strong>
+                                        <ul class="list-group list-group-flush">
+                                            @foreach (var (task, quant) in list)
+                                            {
+                                                @if(task.State != TaskState.Pending) continue;
+                                                <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Nombre: </strong>@task.Title</li>
+                                                <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Uso: </strong> @quant </li>
+                                            }
+                                        </ul>
+                                    </li>
+                                }
+                            </ol>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string projectName { get; set; }
+    private Reactivity _reactivity = Reactivity.GetInstance();
+
+    private ProjectDTO _projectDto;
+    private string? _errorMessage = null;
+
+    public void init()
+    {
+        var (project, error) = ProjectService.GetInstance().GetProjectDto(projectName);
+        if(error != null ) NavManager.NavigateTo("/");
+
+        _projectDto = project!;
+    }
+    
+    protected override void OnInitialized()
+    {
+        init();
+        _reactivity.OnChange += Change;
+    }
+    
+    public void Dispose()
+    {
+        _reactivity.OnChange -= Change;
+    }
+    
+    private void Change()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+    
+    private void DeleteResource(string resourceType, int id)
+    {
+        var errorDelete = ResourceService.GetInstance().DeleteResource(SessionService.GetInstance().GetCurrent()!, id);
+        if (errorDelete != null)
+        {
+            _errorMessage = errorDelete.GetMessage();
+            return;
+        }
+        _errorMessage = null;
+    }
+
+    public Dictionary<int, (ResourceDTO res, List<(TaskDTO task, int quant)>)> ResourceTaskWhoUseThem()
+    {
+        var dic = new Dictionary<int, (ResourceDTO res, List<(TaskDTO task, int quant)>)>();
+        
+        foreach (var (taskName, resList) in _projectDto.ResourceRelation)
+        {
+            foreach (var (res, quant) in resList)
+            {
+                if (!dic.ContainsKey(res.Id))
+                {
+                    dic.Add(res.Id,
+                        ( 
+                            res,
+                            new List<(TaskDTO, int)>
+                            { (
+                                    _projectDto.Tasks.Find(t => t.Title == taskName),
+                                    quant
+                                )! }
+                        ));
+                }
+                else
+                {
+                    var (r, l) = dic[res.Id];
+                    l.Add((
+                        _projectDto.Tasks.Find(t => t.Title == taskName),
+                        quant
+                    )!);
+                    dic[res.Id] = (r, l);
+                }
+            }
+        }
+
+        return dic;
+    }
+    
+    public Dictionary<string, List<(TaskDTO task, int quant)>> ResourceToProjectAndTask(ResourceDTO res)
+    {
+        var dic = new Dictionary<string, List<(TaskDTO task, int quant)>>();
+        var allProject = ProjectService.GetInstance().GetAllProjectsDto();
+        
+        foreach (var (task, quant, _) in res.Queue)
+        {
+            var proj = allProject.First(p => p.Id == task.ProjectId);
+            if (!dic.ContainsKey(proj.Name))
+            {
+                dic.Add(proj.Name, new List<(TaskDTO task, int quant)> { (task, quant) });
+            }
+            else
+            {
+                var l = dic[proj.Name];
+                l.Add((task, quant));
+                dic[proj.Name] = l;
+            }
+        }
+
+        return dic;
+    }
+    
+    private void ReturnToProject()
+    {
+        NavManager.NavigateTo("/proyecto/"+projectName);
+    }
+}

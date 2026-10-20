@@ -1,0 +1,161 @@
+@page "/proyecto/crear"
+@implements IDisposable
+
+@using System.ComponentModel.DataAnnotations
+@using Auxiliaries
+@using Services
+@using Services.DTOs
+@inject NavigationManager NavManager;
+
+@if(_sessionService.GetCurrent() == null) NavManager.NavigateTo("/");
+@if(_sessionService.GetCurrent()!.Role == Roles.ProjectMember) NavManager.NavigateTo("/home");
+
+@if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <div class="alert alert-danger mt-3 text-center">
+        @_errorMessage
+    </div>
+}
+
+<div class="container mt-5">
+    <div>
+        <button class="btn btn-outline-warning" @onclick=ReturnToProjects>
+            <i class="bi bi-arrow-bar-left text-white"></i>
+        </button>
+    </div>
+    <EditForm model="_projectModel" OnValidSubmit="ProjectCreate">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card bg-dark-subtle text-dark-emphasis">
+                    <div class="card-body">
+                        <h3 class="card-title text-center">Creacion de Proyecto</h3>
+                        <div class="mb-3">
+                            <label for="projectName" class="form-label">Nombre</label>
+                            <input type="text" class="form-control" id="projectName" @bind="_project.Name" required/> 
+                        </div>
+                        <div class="mb-3">
+                            <label for="projectAdmin" class="form-label">Administrador de Proyecto</label>
+                            <input class="form-control" list="datalistUserDTOMail" id="projectAdmin" placeholder="Buscar Usuario" @bind="_projectAdmin ">
+                            <datalist id="datalistUserDTOMail">
+                                @foreach (var uDto in _userService.GetAllUserWhichCanAdminNewProject())
+                                {
+                                    <option value="@uDto.Email"/>
+                                }
+                            </datalist>
+                        </div>
+                        <div class="mb-3">
+                            <label for="projectDesc" class="form-label">Descripción</label>
+                            <textarea style="height: 20rem" class="form-control" id="projectDesc" maxlength="400" @bind="_project.Description" required> </textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            Crear
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </EditForm>
+</div>
+
+@code {
+
+    private readonly SessionService _sessionService = SessionService.GetInstance();
+    private readonly ProjectService _projectService = ProjectService.GetInstance();
+    private readonly UserService _userService = UserService.GetInstance();
+    
+    private string? _errorMessage = null;
+    private RequiredProject? _projectModel = new  RequiredProject();
+    private ProjectDTO _project = new ProjectDTO();
+    private string _projectAdmin = "";
+    private readonly Reactivity _reactivity = Reactivity.GetInstance();
+
+    protected override void OnInitialized()
+    {
+        _reactivity.OnChange += Change;
+        
+        Reset();
+    }
+
+    private void ReturnToProjects()
+    {
+        NavManager.NavigateTo("/proyectos");
+    } 
+    public void Dispose()
+    {
+        _reactivity.OnChange -= Change;
+    }
+
+    private void Change()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+    
+    private void Reset()
+    {
+        _errorMessage = "";
+        _projectAdmin = "";
+        _project = new ProjectDTO();
+    }
+
+    private void CreateProjectWithAdmin()
+    {
+        var userDto = _userService.GetUserDto(_projectAdmin)!;
+
+        var availableUser = _userService.GetAllUserWhichCanAdminNewProject();
+        if (userDto == null || !availableUser.Any(dto => dto.Email == _projectAdmin))
+        {
+            _errorMessage = "No existe este usuario o ya es un administrador de proyecto";
+            return;
+        }
+        
+        var error = _projectService.CreateProject(_sessionService.GetCurrent()!, _project);
+        if (error != null)
+        {
+            _errorMessage = error.GetMessage();
+            return;
+        }
+
+        error = _projectService.AddManagerToProject(_sessionService.GetCurrent()!, userDto, _project);
+        
+        if (error != null)
+        {
+            _errorMessage = error.GetMessage();
+            return;
+        }
+        Reset();
+    }
+    
+    private void CreateProjectNoAdmin()
+    {
+        var error = _projectService.CreateProject(_sessionService.GetCurrent()!, _project);
+        if (error != null)
+        {
+            _errorMessage = error.GetMessage();
+            return;
+        }
+        
+        Reset();
+    }
+    
+    
+    private void ProjectCreate()
+    {
+        if(_projectAdmin != "") CreateProjectWithAdmin();
+        else CreateProjectNoAdmin();
+    }
+    
+    
+    
+    public class RequiredProject
+    {
+        [Required]
+        public string? Name { get; set; }
+
+        [Required]
+        [MaxLength(400)]
+        public string? Desc { get; set; }
+
+        public string? adminMail { get; set; }
+    }
+
+}

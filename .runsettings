@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+<RunConfiguration>
+ <EnvironmentVariables>
+ <ASPNETCORE_ENVIRONMENT>Testing</ASPNETCORE_ENVIRONMENT>
+ </EnvironmentVariables>
+</RunConfiguration>
+ <DataCollectionRunSettings>
+ <DataCollectors>
+ <DataCollector friendlyName="XPlat Code Coverage">
+ <Configuration>
+
+<ExcludeByFile>**/*Migrations/*.cs,**/Program.cs,**/*DbContext.cs,**/*Context.cs</ExcludeByFile>
+ <ExcludeByAttribute>GeneratedCodeAttribute</ExcludeByAttribute>
+ </Configuration>
+ </DataCollector>
+ </DataCollectors>
+ </DataCollectionRunSettings>
+</RunSettings>

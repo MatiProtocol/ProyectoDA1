@@ -1,0 +1,12 @@
+﻿@page "/home"
+@using Services
+@rendermode InteractiveServer
+@inject NavigationManager NavManager;
+
+@if(SessionService.GetInstance().GetCurrent() == null) NavManager.NavigateTo("/");
+
+
+<PageTitle>Home</PageTitle>
+
+<h1>TaskTrackPro</h1>
+Bienvenido a TaskTrackPro

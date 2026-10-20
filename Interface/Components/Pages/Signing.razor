@@ -1,0 +1,75 @@
+@layout Layout.EmptyLayout
+@page "/login"
+@using Services
+
+@inject NavigationManager NavManager;
+
+
+@if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <div class="alert alert-danger mt-3 text-center">
+        @_errorMessage
+    </div>
+}
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">TaskTrackPro</a>
+    </div>
+</div>
+<div class="container mt-5">
+
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card bg-dark-subtle text-dark-emphasis">
+                <div class="card-body">
+                    <h3 class="card-title text-center">Iniciar Sesión</h3>
+                    <div class="mb-3">
+                        <label for="Mail" class="form-label">Email</label>
+                        <input type="text" class="form-control" id="Mail" @bind="_email"> <!-- @bind="mail">-->
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Contraseña</label>
+                        <input type="password" class="form-control" id="password" @bind="_password"><!-- @bind="password">-->
+                    </div>
+                    <div>
+                        <button class="btn btn-primary" @onclick="Ingress">
+                            Ingresar
+                        </button>
+
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+
+@code {
+    private readonly SessionService _sessionService = SessionService.GetInstance();
+    private readonly UserService _userService = UserService.GetInstance();
+   
+    private string? _password;
+    private string? _email;
+    private string? _errorMessage;
+
+    protected override void OnInitialized()
+    {
+        _email = "";
+        _password = "";
+    }
+
+    private void Ingress()
+    {
+        var error = _sessionService.Login(_email, _password);
+        if (error == null)
+        {
+            _userService.GetUserDto(_email);
+            NavManager.NavigateTo("/");
+        }
+        else _errorMessage = error.GetMessage();
+    }
+
+}

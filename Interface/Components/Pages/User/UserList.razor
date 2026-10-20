@@ -1,0 +1,208 @@
+﻿@page "/usuario-lista"
+@implements IDisposable
+
+@using Auxiliaries
+@using Services
+@using Services.DTOs
+@inject NavigationManager NavManager
+
+@if (!string.IsNullOrEmpty(_deleteMessage))
+{
+    <div class="alert alert-warning text-black text-center">@_deleteMessage</div>
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-end align-items-center mb-3">
+        <NavLink style="aspect-ratio: 1 / 1; width: 3rem;" class="nav-link p-0 justify-content-center btn btn btn-outline-primary border-primary" href="/usuario-lista/registrar">
+            <h1 class="lh-1 mt-1 text-primary">+</h1>
+        </NavLink>
+    </div>
+    <div class="accordion" id="accordionUser">
+        @foreach (var user in _userService.GetAllUserDto())
+        {
+            <div class="accordion-item bg-transparent border-primary-subtle">
+                <h2 class="accordion-header">
+                    <button class="accordion-button bg-transparent link-primary" type="button" data-bs-toggle="collapse" data-bs-target="#@user.Email" aria-expanded="true" aria-controls="collapseOne">
+                        @user.Name | @user.LastName | @user.Email
+                    </button>
+                </h2>
+                <div id="@user.Email" class="accordion-collapse collapse bg-transparent" data-bs-parent="#accordionUser">
+                    <div class="accordion-body">
+                        <ul class="list-group list-group-flush ">
+                            <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Nombre: </strong>@user.Name</li>
+                            <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Apellido: </strong>@user.LastName </li>
+                            <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Email: </strong>@user.Email</li>
+                            <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Fecha de Nacimiento: </strong>@user.BirthDate</li>
+                            <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Rol: </strong>@user.Role</li>
+                            <div class="d-flex justify-content-between mt-3">
+                                <button type="button" class="btn btn-danger ms-3" @onclick="() => { selectedUser = user; DeleteUser(); }">Eliminar usuario</button>
+                                @if (_sessionService.GetCurrent() != null && _sessionService.GetCurrent().Role == Roles.SystemManager)
+                                {
+                                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#ChangeRoleModal" @onclick="() => selectedUser = user">
+                                        Cambiar Rol
+                                    </button>
+                                }
+                                <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#ResetUserPasswordModal" @onclick="() => { selectedUser = user; ClearErrorMessage(); }">
+                                    Asignar contraseña
+                                </button>
+                            </div>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<div class="modal fade" id="ChangeRoleModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="ChangeRoleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark-subtle border-primary-subtle">
+            <div class="modal-header bg-dark-subtle border-primary-subtle">
+                <h1 class="modal-title fs-5" id="ChangeRoleModalLabel">Cambio Role</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bg-dark-subtle border-primary-subtle">
+                @if (_alertMessage != "")
+                {
+                    <div class="alert alert-danger mt-3 text-center">
+                        @_alertMessage
+                    </div>
+                }
+                @if (selectedUser != null && selectedUser.Role != Roles.SystemManager)
+                {
+                    <select class="form-select bg-secondary" aria-label="RolSelector" @onchange="EventChangeRole">
+                        @for (Roles i = Roles.SystemManager; i >= Roles.ProjectMember; i--)
+                        {
+                            @if (i == selectedUser.Role)
+                            {
+                                <option selected value="@i">@i</option>
+                            }
+                            else
+                            {
+                                <option value="@i">@i</option>
+                            }
+                        }
+                    </select>
+                }
+            </div>
+            <div class="modal-footer bg-dark-subtle border-primary-subtle">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button class="btn btn-primary" data-bs-toggle="modal" @onclick="CambiarRole">Guardar cambio</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="ResetUserPasswordModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="ResetUserPasswordModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark-subtle border-primary-subtle">
+            <div class="modal-header bg-dark-subtle border-primary-subtle">
+                <h1 class="modal-title fs-5" id="ResetUserPasswordModalLabel">Reseteo de contraseña</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bg-dark-subtle border-primary-subtle">
+                
+                @if (_errorMessage != "")
+                {
+                    <div class="alert alert-success" role="alert">
+                        @_errorMessage
+                    </div>
+                }
+                
+                <input type="radio" class="btn-check" name="options-Password" id="option5" autocomplete="off" @onclick="() => EventChangeResetPass(false)" checked>
+                <label class="btn text-white" for="option5">Contraseña por defecto</label>
+
+                <input type="radio" class="btn-check" name="options-Password" id="option6" autocomplete="off" @onclick="() => EventChangeResetPass(true)">
+                <label class="btn text-white" for="option6">Contraseña aleatoria</label>
+            </div>
+            <div class="modal-footer bg-dark-subtle border-primary-subtle">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button class="btn btn-warning" @onclick="ChangePassword">Cambiar Contraseña</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+@code {
+    private readonly SessionService _sessionService = SessionService.GetInstance();
+    private readonly UserService _userService = UserService.GetInstance();
+    
+    private UserDTO? selectedUser;
+    private string _alertMessage="";
+    private Roles? newRole;
+    private bool ResetRandom = false;
+    private readonly Reactivity _reactivity = Reactivity.GetInstance();
+    private string _errorMessage = "";
+    private string _deleteMessage = "";
+
+    protected override void OnInitialized()
+    {
+        if(_sessionService.GetCurrent() == null)
+        {
+            NavManager.NavigateTo("/");
+        }
+        _reactivity.OnChange += Change;
+    }
+    
+    public void Dispose()
+    {
+        _reactivity.OnChange -= Change;
+    }
+
+    private void Change()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ClearErrorMessage() => _errorMessage = ""; 
+    
+    private void CambiarRole()
+    {
+        var current = _sessionService.GetCurrent();
+        if (current != null && selectedUser != null && newRole != null && current.Role >= Roles.ProjectMember)
+        {
+            _userService.ChangeRole(current, selectedUser.Email, (Roles)newRole);
+        }
+    }
+
+    private void EventChangeRole(ChangeEventArgs e)
+    {
+        _alertMessage = "Si Guarda los cambios con el mismo role que usted, no podra volver atras. " +
+                        "\n (Asegúrese que el usuario no tenga un cargo de su mismo rol en algún proyecto)";
+        
+        if (e.Value != null && Enum.TryParse<Roles>(e.Value.ToString(), out var parsedRole))
+        {
+            newRole = parsedRole;
+        }
+    }
+
+    private void EventChangeResetPass(bool option) => ResetRandom = option;
+
+    private void ChangePassword()
+    {
+        var applicant = _sessionService.GetCurrent();
+        if (selectedUser == null) return;
+        if (applicant is not { Role: >= Roles.ProjectManager }) return;
+        if (ResetRandom) _errorMessage = _userService.SetRandomPassword(applicant, selectedUser).Item1;
+        else _errorMessage = _userService.SetDefaultPassword(applicant, selectedUser).Item1;
+    }
+
+    private void DeleteUser()
+    {
+        var applicant = _sessionService.GetCurrent();
+        if (applicant.Role != Roles.SystemManager)
+        {
+            _deleteMessage = "Solo el administrador de sistema puede eliminar usuarios";
+            return;
+        }
+        
+        if (selectedUser == null) return;
+
+        const string message = "No fue posible eliminar al usuario (Asegúrese de que no esté asociado a algún proyecto).";
+        
+        _deleteMessage = !_userService.DeleteUser(applicant, selectedUser) ? message : "Usuario eliminado";
+
+    }
+}

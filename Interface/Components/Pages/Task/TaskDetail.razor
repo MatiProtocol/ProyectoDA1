@@ -1,0 +1,889 @@
+@page "/proyecto/{projectName}/tareas/{TaskName}"
+
+@inject NavigationManager NavigationManager
+
+@using System.ComponentModel.DataAnnotations
+@using Auxiliaries
+@using Services
+@using Services.DTOs
+
+@implements IDisposable
+
+<div class>
+    <button class="btn btn-outline-warning mb-2" @onclick=ReturnToTaskList>
+        <i class="bi bi-arrow-bar-left text-white"></i>
+    </button>
+</div>
+
+<h3>Detalles de Tareas</h3>
+
+@if (_sessionService.GetCurrent() == null || project == null  || task == null || !_projectService.IsPartOfTheProject(_sessionService.GetCurrent(), project))
+{
+    NavigationManager.NavigateTo("/proyectos");
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-warning mt-3 text-center">
+        @errorMessage
+    </div>
+}
+
+<div class="container-fluid mt-2">
+    <div class="card bg-dark-subtle text-dark-emphasis">
+        @if (!loadConfig)
+        {
+            <div class="d-flex justify-content-between">
+                <h3 class="card-title text-center ms-4">Detalles de la Tarea</h3>
+                @if (_projectService.IsManagerOfThisProject(_sessionService.GetCurrent(), project))
+                {
+                    <button type="button" class="btn btn-primary me-4" @onclick="ToggleConfig">
+                        Cambiar Configuración
+                    </button>
+                }
+            </div>
+            <div class="card-body">
+                <div class="m-3 ">
+                    Titulo: <b id="taskTitle" class="text-decoration-underline "> @task!.Title </b><br>
+                </div>
+                <div class="m-3">
+                    Descripción: <b id="taskDescription" class="text-decoration-underline"> @task.Description</b><br>
+                </div>
+                <div class="m-3">
+                    Duración (Horas): <b id="taskDuration" class="text-decoration-underline"> @task.DurationHour</b><br>
+                </div>
+                @if (task.State == TaskState.Pending)
+                {
+                    <div class="m-3">
+                        Fecha Estimada de Inicio: <b id="taskEstimationStart" class="text-decoration-underline"> @task.MinStartTaskDate</b><br>
+                    </div>
+                }
+                else if(task.State == TaskState.Planed)
+                {
+                    <div class="m-3">
+                        Fecha Planeada de Inicio: <b id="taskEstimationStart" class="text-decoration-underline"> @task.StartTaskDate</b><br>
+                    </div>
+                }
+                else
+                {
+                    <div class="m-3">
+                        Fecha de Inicio: <b id="taskEstimationStart" class="text-decoration-underline"> @task.StartTaskDate</b><br>
+                    </div>
+                }
+
+                @if(task.State == TaskState.Finished)
+                {
+                    <div class="m-3">
+                        Fecha de Terminación: <b id="taskEstimationStart" class="text-decoration-underline"> @task.EndTaskDate</b><br>
+                    </div>
+                }
+                
+                <div class="m-3">
+                    Holgura: <b id="taskSlack" class="text-decoration-underline"> @task.Slack</b><br>
+                </div>
+                <div class="m-3 d-flex justify-content-between">
+                    <div>
+                        Estado: <b id="taskState" class="text-decoration-underline"> @StateToSpanish(task.State)</b><br>
+                    </div>
+                    @if (task.State == TaskState.Pending || task.State == TaskState.Planed)
+                    {
+                        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#ChangeState">
+                            cambiar estado a @StateToSpanish(TaskState.Started)
+                        </button>
+                    }
+                    else if (task.State == TaskState.Started)
+                    {
+                        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#ChangeState">
+                            cambiar estado a @StateToSpanish(TaskState.Finished)
+                        </button>
+                    }
+                </div>
+            </div>    
+        }
+        else
+        {
+            <div class="d-flex justify-content-between">
+                <h3 class="card-title text-center ms-4">Configurar tarea</h3>
+            </div>
+            <EditForm Model="_requiredTask" OnValidSubmit="SaveConfig">
+                <div class="card-body">
+                    <div class="m-3 ">
+                        <label for="taskConfigTitle" class="form-label">Titulo</label>
+                        <input type="text" class="form-control" id="taskConfigTitle" @bind="_requiredTask.Title" required>
+                    </div>
+                    <div class="m-3">
+                        <label for="taskConfigDescription" class="form-label">Descripción</label>
+                        <input type="text" class="form-control" id="taskConfigDescription" @bind="_requiredTask.Description" required>
+                    </div>
+                    <div class="m-3">
+                        <label for="taskConfigDuration" class="form-label">Duración (Dias)</label>
+                        <input type="text" class="form-control" id="taskConfigDuration" @bind="_requiredTask.DurationHour" required>
+                    </div>
+            
+                    <div class="card-footer d-flex justify-content-between">
+                        <button type="button" class="btn btn-primary ms-4" @onclick="ToggleConfig">
+                            Volver a detalles
+                        </button>
+                        <button type="submit" class="btn btn-success me-4">guardar</button>
+                    </div>
+                </div>
+            </EditForm>
+        }
+    </div>
+</div>
+
+<h4>Grupo Asignado</h4>
+<div class="accordion" id="accordionUser">
+    @if(_projectService.GetProjectDto(projectName).Item1!.TaskToUsers.ContainsKey(TaskName))
+        @foreach (var user in _projectService.GetProjectDto(projectName).Item1!.TaskToUsers[TaskName])
+    {
+        <div class="accordion-item bg-transparent border-primary-subtle">
+            <h2 class="accordion-header">
+                <button class="accordion-button bg-transparent link-primary" type="button" data-bs-toggle="collapse" data-bs-target="#@user.Email" aria-expanded="true" aria-controls="collapseOne">
+                    @user.Name | @user.LastName | @user.Email
+                </button>
+            </h2>
+            <div id="@user.Email" class="accordion-collapse collapse bg-transparent" data-bs-parent="#accordionUser">
+                <div class="accordion-body">
+                    <ul class="list-group list-group-flush ">
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Nombre:</strong>@user.Name</li>
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Apellido:</strong>@user.LastName </li>
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Email:</strong>@user.Email</li>
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Fecha de Nacimiento:</strong>@user.BirthDate</li>
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Rol:</strong>@user.Role</li>
+                        @if (_projectService.IsManagerOfThisProject(_sessionService.GetCurrent(), project)) 
+                        {
+                            <div class="d-flex justify-content-between mt-3">
+                                <button type="button" class="btn btn-danger ms-3" @onclick="() => RemoveMemberFromTask(user)"><i class="bi bi-trash"></i></button>
+                            </div>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<h4>Dependencias</h4>
+<div class="accordion">
+    @foreach (var typeTask in _projectService.GetTaskDependencies(project, task)!)
+    {
+        <div class="accordion-item bg-transparent border-primary-subtle">
+            <h2 class="accordion-header">
+                <button class="accordion-button bg-transparent link-primary" type="button" data-bs-toggle="collapse" data-bs-target="#@typeTask.task.Title.GetHashCode()" aria-expanded="true" aria-controls="collapseOne">
+                    @typeTask.task.Title | @typeTask.task.DurationHour h| @(typeTask.type == TypeDependency.FS ? "Finalizar para Comenzar" : "Comenzar para Comenzar")
+                </button>
+            </h2>
+            <div id="@typeTask.task.Title.GetHashCode()" class="accordion-collapse collapse bg-transparent" data-bs-parent="#accordionUser">
+                <div class="accordion-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Titulo:</strong>@typeTask.task.Title</li>
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Descripcion:</strong>@typeTask.task.Description</li>
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Duracion (Horas):</strong>@typeTask.task.DurationHour</li>
+                        @if (task.State == TaskState.Pending)
+                        {
+                            <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Fecha de Inicio Estimada:</strong>@typeTask.task.MinStartTaskDate</li>
+                        }
+                        else if (task.State == TaskState.Started)
+                        {
+                            <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Fecha de Comienzo:</strong>@typeTask.task.MinStartTaskDate</li>
+                        }
+                        else
+                        {
+                            <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Fecha de Finalizacion:</strong>@typeTask.task.EndTaskDate</li>
+                        }
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Holgura:</strong>@typeTask.task.Slack</li>
+                        <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Estado:</strong>@(typeTask.type == TypeDependency.FS ? "Finalizar para Comenzar" : "Comenzar para Comenzar")</li>
+                    </ul>
+                    @if (_projectService.IsManagerOfThisProject(_sessionService.GetCurrent(), project))
+                    {
+                        <div class="d-flex justify-content-between mt-3">
+                            <button type="button" class="btn btn-danger ms-3" @onclick="() => RemoveDependenciesFromTask(typeTask.task)"><i class="bi bi-trash"></i></button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<h4>Recursos para la tarea:</h4>
+<div class="accordion" id="accordionResource">
+    @if (_projectService.GetProjectDto(projectName).Item1!.ResourceRelation.ContainsKey(task.Title))
+    {
+        foreach (var resourceTuple in _projectService.GetProjectDto(projectName).Item1!.ResourceRelation[task.Title])
+        {
+            <div class="accordion-item bg-transparent border-primary-subtle">
+                <h2 class="accordion-header">
+                    <button class="accordion-button bg-black link-primary" type="button" data-bs-toggle="collapse" data-bs-target="#@resourceTuple.resource.Id" aria-expanded="true" aria-controls="collapseOne">
+                        Nombre: @resourceTuple.resource.Name | Tipo: @resourceTuple.resource.Type
+                    </button>
+                </h2>
+                <div id="@resourceTuple.Item1.Id" class="accordion-collapse collapse bg-transparent" data-bs-parent="#accordionResource">
+                    <div class="accordion-body">
+                        <ul class="list-group list-group-flush ">
+                            <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Descripción: </strong>@resourceTuple.resource.Description</li>
+                            <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle">
+                                <strong>
+                                    @if (resourceTuple.resource.IsExclusive)
+                                    {
+                                        <span>El recurso es exclusivo del proyecto.</span>
+                                    }
+                                    else
+                                    {
+                                        <span>El recurso no es exclusivo del proyecto.</span>
+                                    }
+                                </strong>
+                            </li>
+                            <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle">
+                                <strong>
+                                    @if (_resourceService.ResourceIsUsed(resourceTuple.resource, project))
+                                    {
+                                        <span>El recurso se está usando en otro proyecto.</span>
+                                    }
+                                    else
+                                    {
+                                        <span>El recurso no se está usando en otro proyecto.</span>
+                                    }
+                                </strong>
+                            </li>
+                            <li class="list-group-item bg-transparent text-secondary-emphasis border-primary-subtle"><strong>Cantidad: </strong>@resourceTuple.Quantity</li>
+
+                            @if (_projectService.IsManagerOfThisProject(_sessionService.GetCurrent(), project) || _sessionService.GetCurrent().Role == Roles.SystemManager)
+                            {
+                                <div class="d-flex justify-content-between mt-3">
+                                    <button type="button" class="btn btn-danger ms-3" @onclick="() => RemoveResourceFromTask(resourceTuple.resource)"><i class="bi bi-trash"></i> Liberar recurso</button>
+                                    @if (resourceTuple.resource.IsExclusive)
+                                    {
+                                        <button type="button" class="btn btn-warning" data-bs-toggle="modal" @onclick="() => GetTypeAndName(resourceTuple.resource.Type, resourceTuple.resource.Name, resourceTuple.resource.IsExclusive)"
+                                                data-bs-target="#EditResourceDataModal">
+                                            Editar recurso
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+<EditForm model="_resourceModelEdit" OnValidSubmit="EditResource">
+    <div class="modal fade" id="EditResourceDataModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="EditResourceDataModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark-subtle border-primary-subtle">
+                <div class="modal-header bg-dark-subtle border-primary-subtle">
+                    <h1 class="modal-title fs-5" id="EditResourceDataModalLabel">Editar datos</h1>
+                </div>
+                <div class="modal-body bg-dark-subtle border-primary-subtle">
+                
+                    @if (!string.IsNullOrEmpty( errorMessage))
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            @errorMessage
+                        </div>
+                    }
+                    
+                    <div class="mb-3">
+                        <label for="resourceTitle" class="form-label">Nuevo título</label>
+                        <input type="text" class="form-control" id="resourceTitle" @bind="_newTitle" required/> 
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="resourceTitle" class="form-label">Nueva descripción</label>
+                        <input type="text" class="form-control" id="resourceTitle" @bind="_newDesc" required/> 
+                    </div>
+                
+                    <div class="modal-footer bg-dark-subtle border-primary-subtle">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" @onclick="ClearImputs">Cerrar</button>
+                        <button class="btn btn-warning" type="submit">Cambiar datos</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</EditForm>
+
+
+
+
+@if (IsMangerOrLeader())
+{
+    <div class="d-flex justify-content-center align-items-center m-3">
+        <button class="p-1 justify-content-center btn btn btn-primary" data-bs-toggle="modal" data-bs-target="#AssignMember">
+            <h6 class="lh-1 mt-1">Asignar Miembro</h6>
+        </button>
+    </div>
+    <div class="modal fade" id="AssignMember" tabindex="-1" role="dialog" aria-labelledby="AsignMember" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content bg-dark-subtle border-primary-subtle">
+                <div class="modal-header">
+                    <label for="NewMember" class="modal-title" id="exampleModalLabel">Asignar Miembro</label>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body bg-dark-subtle border-primary-subtle">
+                    @if (!string.IsNullOrEmpty(assignErrorMessage))
+                    {
+                        <div class="alert alert-danger mt-3 text-center">
+                            @assignErrorMessage
+                        </div>
+                    }
+                    <input class="form-control" list="datalistUserDTOMail" id="NewMember" placeholder="Buscar Usuario" @bind="newMemberMail">
+                    <datalist id="datalistUserDTOMail">
+                        @foreach (var uDTO in GetUserDTONotInTeamTask())
+                        {
+                            <option value="@uDTO.Email"/>
+                        }
+                    </datalist>
+                </div>
+                <div class="modal-footer bg-dark-subtle border-primary-subtle">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" @onclick="AddNewMemberToTask">Save changes</button>
+                </div>
+            </div>
+        </div>
+    </div> 
+}
+
+@if (_projectService.IsManagerOfThisProject(_sessionService.GetCurrent(), project))
+{
+    <div class="d-flex justify-content-center align-items-center mb-3">
+        <button class="p-1 justify-content-center btn btn btn-primary" data-bs-toggle="modal" data-bs-target="#AddResource">
+            <h6 class="lh-1 mt-1">Agregar recurso</h6>
+        </button>
+    </div>
+    <div class="modal fade" id="AddResource" tabindex="-1" role="dialog" aria-labelledby="AddResource" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content bg-dark-subtle border-primary-subtle">
+                <div class="modal-header">
+                    <label for="projectSelect" class="modal-title" id="exampleModalLabel">Añadir un recurso</label>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body bg-dark-subtle border-primary-subtle">
+                    @if (!string.IsNullOrEmpty(resourceErrorMessage))
+                    {
+                        <div class="alert alert-danger mt-3 text-center">
+                            @resourceErrorMessage
+                        </div>
+                    }
+                    <div class="mb-3">
+                        <label for="projectSelect" class="form-label" >Elegir recurso:</label>
+                            
+                        <div class="form-floating">
+                            <select class="form-select" id="projectSelect" @bind="_selectedResourceDtoId">
+                                <option selected value="-1">Elegir recurso</option>
+                                @foreach (var resourceDto in GetResourcesProjectExclusives())
+                                {
+                                    <option value="@resourceDto.Id">@resourceDto.Name. <strong>Tipo: </strong> @resourceDto.Type </option>
+                                }
+                            </select>
+                            
+                        </div>
+                    </div>
+                    <div>
+                        <label for="quantityRes" class="form-label">Cantidad:</label>
+                        <input min="1" type="number" id="quantityRes" class="form-control" @bind="_quantity">
+                    </div>
+                    
+                </div>
+                <div class="modal-footer bg-dark-subtle border-primary-subtle">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="button" class="btn btn-primary" @onclick="AddNewResource">Guardar cambios</button>
+                </div>
+            </div>
+        </div>
+    </div> 
+}
+
+
+@if (IsMangerOrLeader())
+{
+    <div class="d-flex justify-content-center align-items-center mb-3">
+        <button class="p-1 justify-content-center btn btn btn-primary" data-bs-toggle="modal" data-bs-target="#AddDependencies">
+            <h6 class="lh-1 mt-1">Agregar Dependencia</h6>
+        </button>
+    </div>
+    <div class="modal fade" id="AddDependencies" tabindex="-1" role="dialog" aria-labelledby="AsignMember" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content bg-dark-subtle border-primary-subtle">
+                <div class="modal-header">
+                    <label for="NewMember" class="modal-title" id="exampleModalLabel">Asignar Miembro</label>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body bg-dark-subtle border-primary-subtle">
+                    @if (!string.IsNullOrEmpty(depErrorMessage))
+                    {
+                        <div class="alert alert-danger mt-3 text-center">
+                            @depErrorMessage
+                        </div>
+                    }
+                    <input class="form-control" list="datalistTaskDtoTitle" id="NewMember" placeholder="Buscar Tarea" @bind="newDepTitle">
+                    <datalist id="datalistTaskDtoTitle">
+                        @foreach (var taskDto in GetPossibleTaskDto())
+                        {
+                            <option value="@taskDto.Title"/>
+                        }
+                    </datalist>
+                    <label for="TypeDependency">Eligir Tipo de Dependencia</label>
+
+                    <select  class="form-select" id="TypeDependency" @bind="typeDependencies">
+                        <option value="FS" selected>Terminar para Comenzar</option>
+                        <option value="SS">Comenzar para Comenzar</option>
+                    </select> 
+                </div>
+                <div class="modal-footer bg-dark-subtle border-primary-subtle">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="button" class="btn btn-primary" @onclick="AddNewDependency">Guardar cambios</button>
+                </div>
+            </div>
+        </div>
+    </div> 
+}
+
+
+<div class="modal fade" id="ChangeState" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="ChangeStateLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark-subtle border-primary-subtle">
+            <div class="modal-header bg-dark-subtle border-primary-subtle">
+                <h1 class="modal-title fs-5" id="ChangeStateLabel">Precaución!</h1>
+            </div>
+            <div class="modal-body bg-dark-subtle border-primary-subtle">
+                @if (_StateAlertMessage.Equals("Se cambio Correctamente"))
+                {
+                    <div class="alert alert-success text-center">
+                        @_StateAlertMessage
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-warning text-center">
+                        @_StateAlertMessage
+                    </div>
+                }
+                <div>
+                    @if (task.State == TaskState.Pending)
+                    {
+                        <div class="form-check form-switch">
+                            <label class="form-check-label" for="switchCheckDefault">Programar Comienzo</label>
+                            <input class="form-check-input" type="checkbox" role="switch" id="switchCheckDefault" @onclick="toggleOptionToStartTask">
+                        </div>
+
+                        @if (!optionToStartTask)
+                        {
+                            <div clas="d-flex justify-content">
+                                <div>
+                                    <label for="dateToStart">FechaProgramada</label>
+                                    <input id="dateToStart" type="date" @bind="@programedDateTime">
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+            <div class="modal-footer bg-dark-subtle border-primary-subtle">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="@SetDefaultStateAlertMessage">Cancelar</button>
+                @if (!optionToStartTask && task.State == TaskState.Pending)
+                {
+                    <button class="btn btn-warning" @onclick="() => SetProgrammedDateToStartTask(task)">Aceptar</button>
+                }
+                else if (task.State == TaskState.Pending)
+                {
+                    <button class="btn btn-warning" data-bs-dismiss="modal" @onclick="() => SetTaskState(task, TaskState.Started)">Aceptar</button>
+                }
+                else
+                {
+                    <button class="btn btn-warning" @onclick="() => SetTaskState(task, TaskState.Finished)">Aceptar</button>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+@code {
+    private readonly ProjectService _projectService = ProjectService.GetInstance();
+    private readonly SessionService _sessionService = SessionService.GetInstance();
+    private readonly ResourceService _resourceService = ResourceService.GetInstance();
+        
+    [Parameter] public string projectName { get; set; }
+    [Parameter] public string TaskName { get; set; }
+
+    private Reactivity _reactivity = Reactivity.GetInstance();
+
+    private ProjectDTO? project;
+    private TaskDTO? task;
+    private string errorMessage = "";
+    private bool loadConfig;
+    private bool optionToStartTask = true;
+    
+    private string newMemberMail = "";
+    private string assignErrorMessage = "";
+    private UserDTO[] teamNotInTask = [];
+    private RequiredTask? _requiredTask;
+    private string _StateAlertMessage = "Esta seguro de cambiar el estado de la tarea una vez se cambie no podra volver al estado actual.";
+    
+
+    private string newDepTitle = "";
+    private string depErrorMessage = "";
+    private string typeDependencies = "";
+
+    private string? _selectedResourceDtoId = "-1";
+    private string resourceErrorMessage = "";
+    private string _clickedName;
+    private string _clickedType;
+    private bool _clickedExclusiveness;
+    private string? _newTitle;
+    private string? _newDesc;
+    private int _quantity;
+    private DateTime programedDateTime = DateTime.Today;
+    private RequiredResource? _resourceModelEdit = new RequiredResource();
+
+
+    protected override void OnInitialized()
+    {
+        init();
+        Reset();
+        _reactivity.OnChange += Change;
+    }
+
+    public void Dispose()
+    {
+        _reactivity.OnChange -= Change;
+    }
+
+    private void Reset()
+    {
+        errorMessage = "";
+
+        newMemberMail = "";
+        assignErrorMessage = "";
+
+        newDepTitle = "";
+        depErrorMessage = "";
+        typeDependencies = "";
+    }
+
+    private void init()
+    {
+        project = _projectService.GetProjectDto(projectName).Item1;
+        task = _projectService.GetTasksByProject(project).Find(t => t.Title == TaskName);
+        if (task != null) _requiredTask = new RequiredTask(task.Title, task.Description, task.DurationHour.ToString());
+        GetUserDTONotInTeamTask();
+    }
+
+    private void Change()
+    {
+        init();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private string StateToSpanish(TaskState state)
+    {
+        return state switch
+        {
+            TaskState.Finished => "Terminada",
+            TaskState.Started => "Ejecutandose",
+            TaskState.Pending => "Espera",
+            TaskState.Planed => "Programada"
+        };
+    }
+    
+
+    private UserDTO[] GetUserDTONotInTeamTask()
+    {
+        var list = new List<UserDTO>();
+        var listAssigned = project.TaskToUsers.ContainsKey(TaskName) ? project.TaskToUsers[TaskName].ToArray() : [];
+
+        if (project!.Team.Item1 != null && listAssigned.FirstOrDefault(u => u.Email == project!.Team.Item1!.Email) == null)
+            list.Add(project!.Team.Item1);
+
+        foreach (var userDto in project!.Team.Item2)
+        {
+            if (listAssigned.FirstOrDefault(u => u.Email == userDto.Key) != null) continue;
+
+            list.Add(userDto.Value);
+        }
+
+        teamNotInTask = list.ToArray();
+
+        return teamNotInTask;
+    }
+
+    private List<ResourceDTO> GetResourcesProjectExclusives()
+    {
+        var resources = _resourceService.
+            GetAllResourcesDto().Where(res => { return !(res.IsExclusive && !project.
+                ResourceExclucive.Exists(ex => ex.Item1.Id == res.Id)); }).ToList();
+
+        return resources;
+    }
+
+    private void AddNewResource()
+    {
+        if (_selectedResourceDtoId == "-1") return;
+        var resourcesList = _resourceService.GetAllResourcesDto().Where(res => { return !(res.IsExclusive && !project.ResourceExclucive.Exists(ex => ex.Item1.Id == res.Id)); }).ToList();
+        if (resourcesList.Count == 0) return;
+        if (_quantity < 1)
+        {
+            resourceErrorMessage = "No se puede agregar menos de una vez el recurso.";
+            return;
+        }
+        
+        var resource = resourcesList.Find(resource => resource.Id == int.Parse(_selectedResourceDtoId));
+        if (resource == null)
+        {
+            resourceErrorMessage = "No hay un recurso seleccionado.";
+            return;
+        }
+
+        if (_quantity > resource.Quantity - _resourceService.GetResourceTotalUses(resource))
+        {
+            resourceErrorMessage = "Cantidad asignada mayor a la disponible.";
+            return;
+        }
+        var resourceData = new ResourceService.ResourceAdder();
+        resourceData.ProjectDto = project;
+        resourceData.TaskDto = task;
+        resourceData.ResourceDto = resource;
+        resourceData.Quantity = _quantity;
+
+        Error? error = _resourceService.AddResourceToTask(_sessionService.GetCurrent(), resourceData);
+        if (error != null) resourceErrorMessage = error.GetMessage();
+        resourceErrorMessage = "";
+    }
+
+    public void EditResource()
+    {
+        ResourceDTO resourceDto = new ResourceDTO();
+        resourceDto.Name = _clickedName;
+        resourceDto.Type = _clickedType;
+        resourceDto.IsExclusive = _clickedExclusiveness;
+
+        Error? changeDesc = _resourceService.ChangeDescriptionResource(_sessionService.GetCurrent(), project, resourceDto, _newDesc);
+        Error? changeName = _resourceService.ChangeNameResource(_sessionService.GetCurrent(), project, resourceDto, _newTitle);
+
+        if (changeDesc != null)
+        {
+            errorMessage = changeDesc.GetMessage();
+
+        }
+
+        if (changeName != null)
+        {
+            errorMessage = changeName.GetMessage();
+        }
+
+        _clickedName = _newTitle;
+    }
+
+    public void GetTypeAndName(string type, string name, bool exclusiveness)
+    {
+        ClearImputs();
+
+        _clickedName = name;
+        _clickedType = type;
+        _clickedExclusiveness = exclusiveness;
+    }
+
+    public void ClearImputs()
+    {
+        _newDesc = "";
+        _newTitle = "";
+    }
+
+    private void AddNewMemberToTask()
+    {
+        var userDtoSelected = teamNotInTask.FirstOrDefault(u => u.Email == newMemberMail);
+        if (userDtoSelected == null)
+        {
+            assignErrorMessage = "Mail no reconocido";
+            return;
+        }
+
+        var err = _projectService.AddMemberToTask(_sessionService.GetCurrent()!, project!, task!, userDtoSelected);
+        if (err != null)
+        {
+            assignErrorMessage = err.GetMessage();
+            return;
+        }
+
+        Reset();
+    }
+
+    private void RemoveMemberFromTask(UserDTO userDto)
+    {
+        var err = _projectService.RemoveMemberFromTask(_sessionService.GetCurrent()!, project!, task!, userDto);
+
+        if (err != null) errorMessage = err.GetMessage();
+
+        Reset();
+    }
+
+    private class RequiredTask(string title, string desc, string duratioDays)
+    {
+        [Required] public string? Title = title;
+
+        [Required] [MaxLength(400)] public string? Description = desc;
+
+        [Required] public string DurationHour = duratioDays;
+    }
+
+    public class RequiredResource
+    {
+        [Required] public string? Name { get; set; }
+
+        [Required] public string? Description { get; set; }
+    }
+
+    private void SaveConfig()
+    {
+        var applicant = _sessionService.GetCurrent();
+
+        TaskName = _requiredTask.Title;
+
+        var taskDtoNewInfo = new TaskDTO
+        {
+            Title = _requiredTask.Title,
+            Description = _requiredTask.Description,
+            DurationHour = int.Parse(_requiredTask.DurationHour)
+        };
+
+        var changeTaskHelper = new ProjectService.ChangeTaskHelper
+        {
+            OriginalTaskDto = task,
+            NewInfoTaskDto = taskDtoNewInfo,
+            ProjectDto = project
+        };
+
+        if (applicant == null) return;
+        _projectService.ChangeTaskDescription(applicant, changeTaskHelper);
+        _projectService.ChangeTaskDuration(applicant, changeTaskHelper);
+        _projectService.ChangeTaskTitle(applicant, changeTaskHelper);
+    }
+
+    private void ToggleConfig() => loadConfig = !loadConfig;
+
+    private void SetTaskState(TaskDTO taskDto, TaskState state)
+    {
+        var taskDtoNewInfo = new TaskDTO
+        {
+            State = state
+        };
+
+        var changeTaskHelper = new ProjectService.ChangeTaskHelper
+        {
+            OriginalTaskDto = task,
+            NewInfoTaskDto = taskDtoNewInfo,
+            ProjectDto = project
+        };
+        taskDtoNewInfo.StartTaskDate = DateTime.Now;
+        taskDtoNewInfo.EndTaskDate = DateTime.Now;
+
+        var error = _projectService.ChangeTaskState(_sessionService.GetCurrent(), changeTaskHelper);
+        if (error != null) errorMessage = error.GetMessage();
+        
+    }
+
+    private void AddNewDependency()
+    {
+        var dep = project.Tasks.FirstOrDefault(t => t.Title == newDepTitle);
+        if (dep == null)
+        {
+            depErrorMessage = "Tarea no exite";
+            return;
+        }
+
+        if (!Enum.TryParse(typeDependencies, out TypeDependency type))
+        {
+            depErrorMessage = "Tipo de dependencia desconocida";
+            return;
+        }
+
+        var err = _projectService.AddDependencyToTask(_sessionService.GetCurrent()!, project!,
+            new TaskGraphService.Edge()
+            {
+                targetDto = task!,
+                depDto = dep,
+                type = type
+
+            });
+
+        if (err != null)
+        {
+            depErrorMessage = err.GetMessage();
+            return;
+        }
+
+        Reset();
+    }
+
+    private TaskDTO[] GetPossibleTaskDto()
+    {
+        var deps = _projectService.GetTaskDependencies(project, task)!;
+
+        var list = new List<TaskDTO>();
+
+        foreach (var taskItem in project.Tasks)
+        {
+            if (deps.FirstOrDefault(t => t.task.Title == taskItem.Title) != default || !_projectService.TaskDependencyVerifyEdge(project, task, taskItem)) continue;
+
+            list.Add(taskItem);
+        }
+
+        return list.ToArray();
+    }
+
+    private void RemoveDependenciesFromTask(TaskDTO dep)
+    {
+
+        var err = _projectService.RemoveDependencyFromTask(_sessionService.GetCurrent()!, project!, task, dep);
+
+        if (err != null)
+        {
+            errorMessage = err.GetMessage();
+            return;
+        }
+
+        Reset();
+    }
+
+    private void RemoveResourceFromTask(ResourceDTO resourceDto)
+    {
+        var resourceData = new ResourceService.ResourceAdder();
+
+        resourceData.ProjectDto = project;
+        resourceData.ResourceDto = resourceDto;
+        resourceData.TaskDto = task;
+
+        var err = _resourceService.RemoveResourceFromTask(_sessionService.GetCurrent(), resourceData);
+        if (err != null) errorMessage = err.GetMessage();
+    }
+
+    private void SetDefaultStateAlertMessage()
+    {
+        _StateAlertMessage = "Esta seguro de cambiar el estado de la tarea una vez se cambie no podra volver al estado actual.";
+    }
+
+    private void ReturnToTaskList()
+    {
+        NavigationManager.NavigateTo("/proyecto/" + project.Name + "/tareas");
+    }
+
+    private bool IsMangerOrLeader()
+    {
+        return _projectService.IsManagerOfThisProject(_sessionService.GetCurrent(),project) 
+               ||
+               _projectService.IsLeaderOfThisProject(_sessionService.GetCurrent(), project);
+    }
+
+    private void toggleOptionToStartTask() => optionToStartTask = !optionToStartTask;
+
+    private void SetProgrammedDateToStartTask(TaskDTO taskDto)
+    {
+        _projectService.SetProgrammedDateToStartTask(_sessionService.GetCurrent(), project, taskDto, programedDateTime);
+    }
+
+}

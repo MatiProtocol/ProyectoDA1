@@ -1,0 +1,257 @@
+﻿@page "/proyecto/{projectName}/miembros"
+@using System.Linq.Expressions
+@using Auxiliaries
+@using Services
+@using Services.DTOs
+@inject NavigationManager NavigationManager
+@implements IDisposable
+
+@if (_sessionService.GetCurrent() == null || project == null || !_projectService.IsPartOfTheProject(_sessionService.GetCurrent(), project))
+{
+    NavigationManager.NavigateTo("/proyectos");
+}
+
+<PageTitle>Miembros del proyecto</PageTitle>
+
+@if (project != null && usersNotInProject != null)
+{
+    <div class="d-flex justify-content-between">
+        <div>
+            <button class="btn btn-outline-warning" @onclick=ReturnToProject>
+                <i class="bi bi-arrow-bar-left text-white"></i>
+            </button>
+        </div>
+        <div>
+        @if(_projectService.IsManagerOfThisProject( _sessionService.GetCurrent(), project))
+        {
+            <button type="button" class="btn btn-warning me-1" data-bs-toggle="modal" data-bs-target="#AddLeader">
+                Agregar líder
+            </button>
+        }
+        @if(_projectService.IsManagerOrLeader(_sessionService.GetCurrent(), project))
+        {
+            <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#AddMember">
+                Agregar miembro
+            </button>
+        }
+        </div>
+    </div>
+    
+    <div class="card bg-transparent border-primary-subtle w-auto mt-2" style="width: 22rem;">
+        <div class="card-header border-primary-subtle text-lg-center">
+            Miembros del equipo
+        </div>
+        @if (project is { Team.Item1: not null })
+        {
+            var projectManager = project.Team.Item1;
+            <div class="m-2">
+                @($"{projectManager.Name} | {projectManager.LastName} | {projectManager.Email} | Administrador del Proyecto")
+            </div>
+            if (project.Team.Item3 != null)
+            {
+                var projectLeader = project.Team.Item3;
+                <div class="d-flex justify-content-between">
+                    <div class="m-2">
+                        @($"{projectLeader.Name} | {projectLeader.LastName} | {projectLeader.Email} | Lider del Proyecto")
+                    </div>
+                    @if (_projectService.IsManagerOfThisProject(_sessionService.GetCurrent(), project))
+                    {
+                        <div>
+                            <button type="button" class="btn btn-danger" @onclick="RemoveLeader">Eliminar Lider</button>
+                        </div>
+                    }
+                </div>
+            }
+        }
+        @foreach(var projectMember  in OnlyMembers())
+        {
+            <div class="d-flex justify-content-between m-2">
+                @($"{projectMember.Name} | {projectMember.LastName} | {projectMember.Email} | Miembro del proyecto")
+                
+                @if(_projectService.IsManagerOrLeader( _sessionService.GetCurrent(), project))
+                {
+                    <button type="button" class="btn-danger" @onclick="() => RemoveFromProject(projectMember)">
+                        Eliminar del proyecto
+                    </button>
+                }
+            </div>
+        }
+    </div>
+    
+    
+    <div class="modal fade" id="AddMember" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="AddMemberLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark-subtle border-primary-subtle">
+                <div class="modal-header bg-dark-subtle border-primary-subtle">
+                    <h1 class="modal-title fs-5" id="AddMemberLabel">Agregar Usuario al equipo</h1>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body bg-dark-subtle border-primary-subtle">
+                    <div class="modal-body bg-dark-subtle border-primary-subtle">
+                        @foreach (var ((userDto, _), i) in usersNotInProject.Select((t, i) => (t, i)))
+                        {
+                            var manager = project.Team.Item1;
+                            if (manager != null && userDto.Email == manager.Email) continue;
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" @bind="usersNotInProject[i].Item2" id="@($"{userDto.Email}")">
+                                <label class="form-check-label" for="@($"{userDto.Email}")">
+                                    @userDto.Name | @userDto.LastName | @userDto.Email
+                                </label>
+                            </div>
+                        }
+                    </div>
+                    <div class="modal-footer bg-dark-subtle border-primary-subtle">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" >Cancelar</button>
+                        <button class="btn btn-warning" data-bs-toggle="modal" @onclick="AddMembersToProject">Guardar Cambios</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal fade" id="AddLeader" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="AddMemberLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark-subtle border-primary-subtle">
+                <div class="modal-header bg-dark-subtle border-primary-subtle">
+                    <h1 class="modal-title fs-5" id="AddLeaderLabel">Agregar lider al equipo</h1>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="dropdown">
+                    <label for="LeaderDropdown" class="m-2">
+                        Asignar lider del proyecto:
+                    </label>
+                    <button class="btn btn-secondary dropdown-toggle m-2" id="LeaderDropdown"
+                            type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Seleccionar lider
+                    </button>
+                    <ul class="dropdown-menu">
+                        @foreach (var user in _usersCanBeLeader)
+                        {
+                            <li>
+                                <a class="dropdown-item"
+                                   @onclick="() => AssignLeader(user)">
+                                    @($"{user.Name} | {user.LastName} | {user.Email}")
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+}
+
+@code {
+    [Parameter] public string projectName { get; set; }
+
+    private readonly ProjectService _projectService = ProjectService.GetInstance();
+    private readonly SessionService _sessionService = SessionService.GetInstance();
+    private readonly UserService _userService = UserService.GetInstance();
+
+    private ProjectDTO? project;
+    private (UserDTO, bool)[]? usersNotInProject;
+    private Dictionary<string, UserDTO>? membersToAdd;
+    private Reactivity _reactivity = Reactivity.GetInstance();
+    private UserDTO[] _usersCanBeLeader;
+
+    protected override void OnInitialized()
+    {
+        if (_sessionService.GetCurrent() != null && project != null) NavigationManager.NavigateTo("/");
+        project = _projectService.GetProjectDto(projectName).Item1;
+        membersToAdd = [];
+        usersNotInProject = [];
+        GetUsersNotInProject();
+        GetUsersCanBeLeader();
+        _reactivity.OnChange += Change;
+    }
+
+    private void GetUsersCanBeLeader()
+    {
+        if (project != null) _usersCanBeLeader = _projectService.GetUsersCanBeLeader(project);
+    }
+    
+    private List<UserDTO> OnlyMembers()
+    {
+        var manager = project!.Team.Item1;
+        var leader = project!.Team.Item3;
+        List<UserDTO> members = [];
+        
+        foreach(var m in project!.Team.Item2.Values)
+        {
+            if (manager != null)
+            {
+                if (leader != null)
+                {
+                    if(!(m.Email.Equals(manager.Email) || leader.Email.Equals(m.Email))) members.Add(m);
+                }
+                else if(!m.Email.Equals(manager.Email)) members.Add(m);
+            }
+            else members.Add(m);
+        }
+        return members;
+    }
+
+    private void GetUsersNotInProject()
+    {
+        var allUsers = _userService.GetAllUserDto();
+        var memberUserNames = project.Team.Item2.Keys;
+
+        var nonMemberUsers = allUsers.Where(user => !memberUserNames.Contains(user.Email)).ToDictionary(user => user.Email, user => user);
+        usersNotInProject = nonMemberUsers.Values.Select(u => (u, false)).ToArray();
+    }
+
+    private void ReturnToProject()
+    {
+        NavigationManager.NavigateTo("/proyecto/" + project.Name);
+    }
+
+    private void AddOrRemoveMember(UserDTO userDto)
+    {
+        if (!membersToAdd.TryAdd(userDto.Email, userDto)) membersToAdd.Remove(userDto.Email);
+    }
+
+    private void AddMembersToProject()
+    {
+        if (_sessionService.GetCurrent() == null) return;
+        if (project == null) return;
+        foreach (var (userDto, add) in usersNotInProject)
+        {
+            if(!add) continue;
+            _projectService.AddMemberToProject(_sessionService.GetCurrent(), userDto, project);
+        }
+
+        ClearMembersToAdd();
+        
+    }
+
+    private void ClearMembersToAdd() => membersToAdd.Clear();
+
+    private void RemoveFromProject(UserDTO user)
+    {
+        _projectService.RemoveMemberFromProject(_sessionService.GetCurrent(), user, project);
+    }
+
+    public void Dispose()
+    {
+        _reactivity.OnChange -= Change;
+    }
+
+    private void Change()
+    {
+        project = _projectService.GetProjectDto(project.Name).Item1;
+        GetUsersNotInProject();
+        InvokeAsync(StateHasChanged);
+    }
+    
+
+    private void AssignLeader(UserDTO userDto)
+    {
+        if (project != null) _projectService.SetLeaderToProject(_sessionService.GetCurrent(), userDto, project);
+    }
+
+    private void RemoveLeader()
+    {
+        if (project != null) _projectService.RemoveLeaderToProject(_sessionService.GetCurrent(), project);
+    }
+}

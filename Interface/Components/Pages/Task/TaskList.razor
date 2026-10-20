@@ -1,0 +1,110 @@
+﻿@page "/proyecto/{projectName}/tareas"
+@using Auxiliaries
+@using Services
+@using Services.DTOs
+@inject NavigationManager NavigationManager
+@implements IDisposable
+
+@if (SessionService.GetCurrent() == null || project == null || !ProjectService.IsPartOfTheProject(SessionService.GetCurrent(), project))
+{
+    NavigationManager.NavigateTo("/proyectos");
+}
+
+@if (ProjectService.IsManagerOrLeader(SessionService.GetCurrent(), project)) 
+{
+    <div class="d-flex justify-content-between">
+        <button class="btn btn-outline-warning" @onclick=ReturnToProject>
+            <i class="bi bi-arrow-bar-left text-white"></i>
+        </button>
+        
+        <NavLink class="btn btn-primary" href=@($"/proyecto/{projectName}/tareas/crear") >
+            Crear Tarea
+        </NavLink>
+        
+    </div>
+}
+<div class="card bg-dark-subtle text-dark-emphasis mt-2">
+    <h3 class="card-title text-center">Tareas</h3>
+    <div class="card-body">
+        <div class="d-flex justify-content-between m-1">
+            Title | Description | State | Slack | Critical
+        </div>
+        @foreach (var task in project.Tasks)
+        {
+            <div class="d-flex justify-content-between m-1">
+                <div class="d-flex justify-content-between">
+                    @{ criticalHelper = task.Slack == 0 ? "S" : "N"; }
+                    @task.Title |
+                    @task.Description |
+                    @StateToSpanish(task.State.ToString()) |
+                    @task.Slack |
+                    @criticalHelper
+                </div>
+                <button type="button" class="btn btn-primary" @onclick="() => GoTaskDetail(task)">
+                    Ver Detalles
+                </button>
+                @if (ProjectService.IsManagerOrLeader(SessionService.GetCurrent(), project))
+                {
+                    <button type="button" class="btn btn-danger" @onclick="() => DeleteTask(task)">
+                        Eliminar
+                    </button>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private readonly ProjectService ProjectService = ProjectService.GetInstance();
+    private readonly SessionService SessionService = SessionService.GetInstance();
+    
+    [Parameter] 
+    public string projectName { get; set; }
+
+    private Reactivity _reactivity = Reactivity.GetInstance();
+    private ProjectDTO? project;
+    private string criticalHelper = "";
+
+    protected override void OnInitialized()
+    {
+        project = ProjectService.GetProjectDto(projectName).Item1;
+        ProjectService.GetProjectDto(projectName);
+        _reactivity.OnChange += Change;
+    }
+
+    private static string StateToSpanish(string taskState)
+    {
+        return taskState switch
+        {
+            "Pending" => "Espera",
+            "Started" => "Ejecutandose",
+            _ => "Terminada"
+        };
+    }
+
+    public void Dispose()
+    {
+        _reactivity.OnChange -= Change;
+    }
+    
+    private void ReturnToProject()
+    {
+        NavigationManager.NavigateTo("/proyecto/" + project.Name);
+    }
+
+    private void Change()
+    {
+        project = ProjectService.GetProjectDto(project.Name).Item1;
+        InvokeAsync(StateHasChanged);
+    }
+    
+    private void DeleteTask(TaskDTO task)
+    {
+        ProjectService.RemoveTask(SessionService.GetCurrent(), project, task);
+    }
+
+    private void GoTaskDetail(TaskDTO task)
+    {
+        NavigationManager.NavigateTo($"/proyecto/{projectName}/tareas/{task.Title}");
+    }
+}
